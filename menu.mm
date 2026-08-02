@@ -7,6 +7,7 @@
 @property (nonatomic, strong) UIView *menuPanel;
 @property (nonatomic, strong) UIView *settingsPanel; // Expandable filtration drawer
 @property (nonatomic, strong) UIPanGestureRecognizer *panGesture;
+@property (nonatomic, strong) UILabel *debugLabel;
 @end
 
 static ClickGUIWindow *gGuiWindow = nil;
@@ -23,6 +24,9 @@ static ClickGUIWindow *gGuiWindow = nil;
         [self createFloatingBubble];
         [self createMenuPanel];
         [self createSettingsPanel];
+        
+        // Start stats refresh timer
+        [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(updateDebugStats) userInfo:nil repeats:YES];
     }
     return self;
 }
@@ -73,7 +77,7 @@ static ClickGUIWindow *gGuiWindow = nil;
 // 2. Sliding ClickGUI Module Selection Panel
 - (void)createMenuPanel {
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
-    self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 240) / 2, 320, 220)];
+    self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 290) / 2, 320, 290)];
     self.menuPanel.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.10 alpha:0.95];
     self.menuPanel.layer.cornerRadius = 10;
     self.menuPanel.layer.borderWidth = 1.5;
@@ -116,9 +120,24 @@ static ClickGUIWindow *gGuiWindow = nil;
     
     [self.menuPanel addSubview:espRow];
     
+    // ----------------- Debug Statistics Label -----------------
+    UIView *debugRow = [[UIView alloc] initWithFrame:CGRectMake(15, 110, 290, 115)];
+    debugRow.backgroundColor = [UIColor colorWithRed:0.04 green:0.04 blue:0.06 alpha:0.85];
+    debugRow.layer.cornerRadius = 6;
+    debugRow.layer.borderWidth = 1.0;
+    debugRow.layer.borderColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0].CGColor;
+    
+    self.debugLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 5, 270, 105)];
+    self.debugLabel.textColor = [UIColor colorWithRed:0.0 green:0.94 blue:0.45 alpha:1.0]; // Bright green font
+    self.debugLabel.font = [UIFont fontWithName:@"Courier" size:9.0] ?: [UIFont systemFontOfSize:9.0 weight:UIFontWeightBold];
+    self.debugLabel.numberOfLines = 0;
+    self.debugLabel.text = @"DEBUG STATS:\nRetrieving binary info...\nWaiting for application launch hooks...";
+    [debugRow addSubview:self.debugLabel];
+    [self.menuPanel addSubview:debugRow];
+    
     // Close button
     UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(15, 170, 290, 35);
+    closeBtn.frame = CGRectMake(15, 240, 290, 35);
     closeBtn.backgroundColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:0.3];
     closeBtn.layer.cornerRadius = 6;
     [closeBtn setTitle:@"CLOSE MENU" forState:UIControlStateNormal];
@@ -206,6 +225,15 @@ static ClickGUIWindow *gGuiWindow = nil;
 }
 
 // ----------------- Action Event Observers -----------------
+- (void)updateDebugStats {
+    uintptr_t baseAddr = (uintptr_t)_dyld_get_image_header(0);
+    self.debugLabel.text = [NSString stringWithFormat:@"DEBUG STATS:\nBase Address: 0x%lx\nTick Hook Addr: 0x%lx\nTick Status: %s\nScanned Entities: %d",
+                            baseAddr,
+                            Hooks::gTickAddressResolved,
+                            (Hooks::gTickAddressResolved != 0 ? "HOOKED" : "FAILED"),
+                            Hooks::gScannedEntitiesCount];
+}
+
 - (void)espToggled:(UISwitch *)sender {
     Hooks::storageEspEnabled = sender.on;
 }
@@ -248,16 +276,6 @@ static ClickGUIWindow *gGuiWindow = nil;
 - (void)openSettingsPanel {
     self.settingsPanel.hidden = !self.settingsPanel.hidden;
 }
-
-// Override hitTest to allow interaction pass-through to game viewport on background clicks
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *hitView = [super hitTest:point withEvent:event];
-    if (hitView == self) {
-        return nil; // Pass clicks to game
-    }
-    return hitView;
-}
-
 @end
 
 namespace Menu {
