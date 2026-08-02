@@ -4,7 +4,6 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
-#import <Foundation/Foundation.h>
 
 namespace Hooks {
     
@@ -118,10 +117,10 @@ namespace Hooks {
         // Standard signature pattern matches the prologue of Player::tick function in Arm64 Bedrock
         uintptr_t tickAddress = Memory::FindSignature("FD 7B BE A9 FD 03 00 91 F3 0B 00 F9 ? ? ? ? F4 4F 01 A9");
         if (tickAddress) {
-            NSLog(@"[yt] Player::tick resolved: 0x%lx. Hooking...", tickAddress);
+            std::cout << "[yt] Player::tick resolved: 0x" << std::hex << tickAddress << ". Hooking..." << std::endl;
             ApplyInlineHook((void*)tickAddress, (void*)&hkPlayerTick, (void**)&oPlayerTick);
         } else {
-            NSLog(@"[yt] [WARNING] Player::tick signature search failed. Hooks disabled.");
+            std::cout << "[yt] [WARNING] Player::tick signature search failed. Hooks disabled." << std::endl;
         }
     }
 
