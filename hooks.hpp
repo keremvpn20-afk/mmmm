@@ -28,6 +28,10 @@ namespace Hooks {
     extern std::vector<MappedContainer> detectedContainers;
     extern std::mutex containerMutex;
 
+    // Debugging properties
+    extern uintptr_t gTickAddressResolved;
+    extern int gScannedEntitiesCount;
+
     // Setup hooks via dynamic signature scanning
     void Initialize();
     void Terminate();
