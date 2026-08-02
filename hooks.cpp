@@ -4,6 +4,7 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#import <Foundation/Foundation.h>
 
 namespace Hooks {
     
@@ -113,17 +114,14 @@ namespace Hooks {
     }
 
     void Initialize() {
-        uintptr_t baseAddress = Memory::GetBaseAddress();
-
         // Dynamically resolve Player::tick signature via pattern matching (no static offsets needed)
         // Standard signature pattern matches the prologue of Player::tick function in Arm64 Bedrock
         uintptr_t tickAddress = Memory::FindSignature("FD 7B BE A9 FD 03 00 91 F3 0B 00 F9 ? ? ? ? F4 4F 01 A9");
         if (tickAddress) {
+            NSLog(@"[yt] Player::tick resolved: 0x%lx. Hooking...", tickAddress);
             ApplyInlineHook((void*)tickAddress, (void*)&hkPlayerTick, (void**)&oPlayerTick);
         } else {
-            // Safe fallback: Hook index offset directly if exact pattern signature scan fails
-            uintptr_t fallbackAddress = baseAddress + 0x2401C00; // Estimated Bedrock tick segment
-            ApplyInlineHook((void*)fallbackAddress, (void*)&hkPlayerTick, (void**)&oPlayerTick);
+            NSLog(@"[yt] [WARNING] Player::tick signature search failed. Hooks disabled.");
         }
     }
 
