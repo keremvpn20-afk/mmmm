@@ -1,6 +1,7 @@
 #import "menu.h"
 #include "hooks.hpp"
 #import <UIKit/UIKit.h>
+#import <mach-o/dyld.h>
 
 @interface ClickGUIWindow : UIWindow
 @property (nonatomic, strong) UIButton *floatingButton;
