@@ -99,7 +99,7 @@ static ClickGUIWindow *gGuiWindow = nil;
     [espRow addSubview:espLabel];
     
     // Toggle switch
-    UISwitch *espSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(225, 7)];
+    UISwitch *espSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(225, 7, 51, 31)];
     espSwitch.on = Hooks::storageEspEnabled;
     espSwitch.onTintColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0];
     [espSwitch addTarget:self action:@selector(espToggled:) forControlEvents:UIControlEventValueChanged];
@@ -194,7 +194,7 @@ static ClickGUIWindow *gGuiWindow = nil;
     label.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightRegular];
     [row addSubview:label];
     
-    UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(180, 3)];
+    UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(180, 3, 51, 31)];
     sw.on = val;
     sw.transform = CGAffineTransformMakeScale(0.75, 0.75); // Compact fit
     sw.onTintColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0];
