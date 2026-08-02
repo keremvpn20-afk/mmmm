@@ -1,6 +1,7 @@
 #pragma once
 #include "sdk.hpp"
 #include <vector>
+#include <mutex>
 
 namespace Hooks {
     // Config properties shared with UI Menu and Drawing Overlay
@@ -25,6 +26,7 @@ namespace Hooks {
     };
 
     extern std::vector<MappedContainer> detectedContainers;
+    extern std::mutex containerMutex;
 
     // Setup hooks via dynamic signature scanning
     void Initialize();
