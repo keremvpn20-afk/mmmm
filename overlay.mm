@@ -76,10 +76,8 @@ static NSString* NameForContainer(int type) {
     std::vector<Hooks::MappedContainer> localList;
     {
         // Safe access copy to avoid data mutations during drawing
-        extern std::mutex containerMutex;
-        extern std::vector<Hooks::MappedContainer> detectedContainers;
-        std::lock_guard<std::mutex> lock(containerMutex);
-        localList = detectedContainers;
+        std::lock_guard<std::mutex> lock(Hooks::containerMutex);
+        localList = Hooks::detectedContainers;
     }
 
     for (const auto& obj : localList) {
