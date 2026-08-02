@@ -28,6 +28,10 @@ namespace Hooks {
     // Original ticked functions captured dynamically
     void (*oPlayerTick)(SDK::Player* self) = nullptr;
 
+    // Debugging properties
+    uintptr_t gTickAddressResolved = 0;
+    int gScannedEntitiesCount = 0;
+
     // Fast inline arm64 patch injection
     bool ApplyInlineHook(void* target, void* replacement, void** original) {
         if (!target || !replacement || !original) return false;
@@ -91,6 +95,7 @@ namespace Hooks {
 
         // Thread-safe update of visual data
         std::lock_guard<std::mutex> lock(containerMutex);
+        gScannedEntitiesCount = (int)tempContainers.size();
         detectedContainers = std::move(tempContainers);
     }
 
@@ -116,6 +121,7 @@ namespace Hooks {
         // Dynamically resolve Player::tick signature via pattern matching (no static offsets needed)
         // Standard signature pattern matches the prologue of Player::tick function in Arm64 Bedrock
         uintptr_t tickAddress = Memory::FindSignature("FD 7B BE A9 FD 03 00 91 F3 0B 00 F9 ? ? ? ? F4 4F 01 A9");
+        gTickAddressResolved = tickAddress;
         if (tickAddress) {
             std::cout << "[yt] Player::tick resolved: 0x" << std::hex << tickAddress << ". Hooking..." << std::endl;
             ApplyInlineHook((void*)tickAddress, (void*)&hkPlayerTick, (void**)&oPlayerTick);
