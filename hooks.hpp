@@ -31,6 +31,7 @@ namespace Hooks {
     // Debugging properties
     extern uintptr_t gTickAddressResolved;
     extern int gScannedEntitiesCount;
+    extern SDK::Player* gLocalPlayer;
 
     // Setup hooks via dynamic signature scanning
     void Initialize();
