@@ -36,10 +36,35 @@ namespace Hooks {
     uintptr_t gTickAddressResolved = 0;
     int gScannedEntitiesCount = 0;
 
-    // Fast inline arm64 patch injection
+    #include <dlfcn.h>
+    typedef void (*MSHookFunction_t)(void *symbol, void *replace, void **result);
+
+    // Fast inline arm64 patch injection with dynamic jailbreak framework resolution
     bool ApplyInlineHook(void* target, void* replacement, void** original) {
         if (!target || !replacement || !original) return false;
 
+        // 1. Try resolving MSHookFunction dynamically from Substrate or ElleKit (Standard jailbreak methods)
+        void* handles[] = {
+            dlopen("/usr/lib/libsubstrate.dylib", RTLD_LAZY),
+            dlopen("/var/lib/ellekit/ellekit.dylib", RTLD_LAZY),
+            dlopen("/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate", RTLD_LAZY),
+            dlopen("/usr/lib/libellekit.dylib", RTLD_LAZY),
+            dlopen("libsubstrate.dylib", RTLD_LAZY)
+        };
+        
+        for (void* handle : handles) {
+            if (handle) {
+                MSHookFunction_t hookFn = (MSHookFunction_t)dlsym(handle, "MSHookFunction");
+                if (hookFn) {
+                    hookFn(target, replacement, original);
+                    printf("[yt] Hooked successfully using MSHookFunction from jailbreak environment\n");
+                    return true;
+                }
+            }
+        }
+
+        // 2. Fallback to manual write-protection bypass byte-patching (e.g. Sideloads / TrollStore)
+        printf("[yt] Jailbreak hooks not found, falling back to manual byte-patching\n");
         *original = target;
 
         // Assembly patch: LDR X16, #8 ; BR X16
@@ -125,14 +150,17 @@ namespace Hooks {
 
     void Initialize() {
         uintptr_t base = Memory::GetBaseAddress();
+        printf("[yt] Initialize: Base address is 0x%lx\n", base);
         
         // 1. Hook sendComplexInventoryTransaction (retrieves LocalPlayer*)
         uintptr_t transactionAddr = base + 0x4AD18D0;
-        ApplyInlineHook((void*)transactionAddr, (void*)&hkSendComplexInventoryTransaction, (void**)&oSendComplexInventoryTransaction);
+        bool hook1 = ApplyInlineHook((void*)transactionAddr, (void*)&hkSendComplexInventoryTransaction, (void**)&oSendComplexInventoryTransaction);
+        printf("[yt] Hook sendComplexInventoryTransaction result: %s at address 0x%lx\n", hook1 ? "SUCCESS" : "FAILED", transactionAddr);
         
         // 2. Hook RemoveActorPacket handler (resets LocalPlayer* on leave)
         uintptr_t removeActorAddr = base + 0x43DA384;
-        ApplyInlineHook((void*)removeActorAddr, (void*)&hkRemoveActor, (void**)&oRemoveActor);
+        bool hook2 = ApplyInlineHook((void*)removeActorAddr, (void*)&hkRemoveActor, (void**)&oRemoveActor);
+        printf("[yt] Hook RemoveActorPacket handler result: %s at address 0x%lx\n", hook2 ? "SUCCESS" : "FAILED", removeActorAddr);
     }
 
     void Terminate() {
