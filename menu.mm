@@ -20,7 +20,7 @@ static ClickGUIWindow *gGuiWindow = nil;
     if (self) {
         self.windowLevel = UIWindowLevelAlert + 1;
         self.backgroundColor = [UIColor clearColor];
-        [self makeKeyAndVisible];
+        self.hidden = NO; // Display window without stealing key focus from game window
         
         [self createFloatingBubble];
         [self createMenuPanel];
@@ -276,6 +276,15 @@ static ClickGUIWindow *gGuiWindow = nil;
 
 - (void)openSettingsPanel {
     self.settingsPanel.hidden = !self.settingsPanel.hidden;
+}
+
+// Override hitTest to allow interaction pass-through to game viewport on background clicks
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hitView = [super hitTest:point withEvent:event];
+    if (hitView == self) {
+        return nil; // Pass clicks to game
+    }
+    return hitView;
 }
 @end
 
