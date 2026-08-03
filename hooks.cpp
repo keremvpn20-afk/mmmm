@@ -25,8 +25,12 @@ namespace Hooks {
     std::vector<MappedContainer> detectedContainers;
     std::mutex containerMutex;
 
+    // Active player pointer
+    SDK::Player* gLocalPlayer = nullptr;
+
     // Original ticked functions captured dynamically
-    void (*oPlayerTick)(SDK::Player* self) = nullptr;
+    void (*oSendComplexInventoryTransaction)(void* self, void* transaction) = nullptr;
+    void (*oRemoveActor)(void* self, void* packet) = nullptr;
 
     // Debugging properties
     uintptr_t gTickAddressResolved = 0;
@@ -99,35 +103,36 @@ namespace Hooks {
         detectedContainers = std::move(tempContainers);
     }
 
-    // Intercepted player tick loop
-    void hkPlayerTick(SDK::Player* self) {
-        if (self && self->isLocalPlayer()) {
-            if (storageEspEnabled) {
-                // Run container traversal in an isolated thread to maintain game performance (0 FPS drop)
-                std::thread scanThread(ProcessContainerScanning, self);
-                scanThread.detach();
-            } else {
-                std::lock_guard<std::mutex> lock(containerMutex);
-                detectedContainers.clear();
-            }
+    // Intercepted inventory transaction to capture LocalPlayer
+    void hkSendComplexInventoryTransaction(void* self, void* transaction) {
+        if (self) {
+            gLocalPlayer = (SDK::Player*)self;
+            gTickAddressResolved = 0x4AD18D0; // Visual debug indicator
         }
+        if (oSendComplexInventoryTransaction) {
+            oSendComplexInventoryTransaction(self, transaction);
+        }
+    }
 
-        if (oPlayerTick) {
-            oPlayerTick(self);
+    // Intercepted actor removal to safely clear tracking
+    void hkRemoveActor(void* self, void* packet) {
+        gLocalPlayer = nullptr;
+        gTickAddressResolved = 0;
+        if (oRemoveActor) {
+            oRemoveActor(self, packet);
         }
     }
 
     void Initialize() {
-        // Dynamically resolve Player::tick signature via pattern matching (no static offsets needed)
-        // Standard signature pattern matches the prologue of Player::tick function in Arm64 Bedrock
-        uintptr_t tickAddress = Memory::FindSignature("FD 7B BE A9 FD 03 00 91 F3 0B 00 F9 ? ? ? ? F4 4F 01 A9");
-        gTickAddressResolved = tickAddress;
-        if (tickAddress) {
-            std::cout << "[yt] Player::tick resolved: 0x" << std::hex << tickAddress << ". Hooking..." << std::endl;
-            ApplyInlineHook((void*)tickAddress, (void*)&hkPlayerTick, (void**)&oPlayerTick);
-        } else {
-            std::cout << "[yt] [WARNING] Player::tick signature search failed. Hooks disabled." << std::endl;
-        }
+        uintptr_t base = Memory::GetBaseAddress();
+        
+        // 1. Hook sendComplexInventoryTransaction (retrieves LocalPlayer*)
+        uintptr_t transactionAddr = base + 0x4AD18D0;
+        ApplyInlineHook((void*)transactionAddr, (void*)&hkSendComplexInventoryTransaction, (void**)&oSendComplexInventoryTransaction);
+        
+        // 2. Hook RemoveActorPacket handler (resets LocalPlayer* on leave)
+        uintptr_t removeActorAddr = base + 0x43DA384;
+        ApplyInlineHook((void*)removeActorAddr, (void*)&hkRemoveActor, (void**)&oRemoveActor);
     }
 
     void Terminate() {
