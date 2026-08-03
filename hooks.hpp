@@ -36,4 +36,5 @@ namespace Hooks {
     // Setup hooks via dynamic signature scanning
     void Initialize();
     void Terminate();
+    void ProcessContainerScanning(SDK::Player* localPlayer);
 }
