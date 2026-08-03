@@ -3,6 +3,8 @@
 #include "sdk.hpp"
 #include "memory.hpp"
 #import <UIKit/UIKit.h>
+#include <thread>
+#include <chrono>
 
 @interface MainESPView : UIView
 @property (nonatomic, strong) CADisplayLink *displayLink;
@@ -27,6 +29,10 @@ static MainESPView *gEspView = nil;
 
 - (void)redraw {
     if (Hooks::storageEspEnabled) {
+        if (Hooks::gLocalPlayer) {
+            // Synchronous instant scan on rendering thread
+            Hooks::ProcessContainerScanning(Hooks::gLocalPlayer);
+        }
         [self setNeedsDisplay];
     } else {
         // Optimization: clear graphics context on toggle off
@@ -76,6 +82,7 @@ static NSString* NameForContainer(int type) {
     std::vector<Hooks::MappedContainer> localList;
     {
         // Safe access copy to avoid data mutations during drawing
+        extern std::mutex containerMutex; // Declared in Hooks namespace context
         std::lock_guard<std::mutex> lock(Hooks::containerMutex);
         localList = Hooks::detectedContainers;
     }
@@ -123,7 +130,7 @@ static NSString* NameForContainer(int type) {
                 CGContextMoveToPoint(context, screenCenter.x, screenCenter.y);
                 CGContextAddLineToPoint(context, screen.x, screen.y);
                 CGContextSetStrokeColorWithColor(context, color.CGColor);
-                CGContextSetLineWidth(context, 0.8);
+                CGContextSetLineWidth(0.8);
                 CGContextStrokePath(context);
             }
         }
