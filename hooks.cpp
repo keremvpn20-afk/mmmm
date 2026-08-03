@@ -4,166 +4,134 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <dlfcn.h>
 
 namespace Hooks {
     
-    // Core settings mapping to GUI toggle states
     bool storageEspEnabled = false;
-
-    // Filters for "..." sub-settings panel
     bool filterChest = true;
     bool filterEnderChest = true;
     bool filterShulker = true;
     bool filterHopper = true;
     bool filterSpawner = true;
     bool filterBarrel = true;
-
-    // Tracers toggle
     bool drawTracers = false;
 
-    // Thread-safe coordinate tracking array
     std::vector<MappedContainer> detectedContainers;
     std::mutex containerMutex;
-
-    // Active player pointer
     SDK::Player* gLocalPlayer = nullptr;
 
-    // Original ticked functions captured dynamically
-    void (*oSendComplexInventoryTransaction)(void* self, void* transaction) = nullptr;
+    void (*oClientTick)(void* self) = nullptr;
     void (*oRemoveActor)(void* self, void* packet) = nullptr;
 
-    // Debugging properties
     uintptr_t gTickAddressResolved = 0;
     int gScannedEntitiesCount = 0;
 
-    #include <dlfcn.h>
-    typedef void (*MSHookFunction_t)(void *symbol, void *replace, void **result);
+    typedef void (*MSHookFunction_t)(void* symbol, void* replace, void** result);
 
-    // Fast inline arm64 patch injection with dynamic jailbreak framework resolution
     bool ApplyInlineHook(void* target, void* replacement, void** original) {
         if (!target || !replacement || !original) return false;
 
-        // 1. Try resolving MSHookFunction dynamically from Substrate or ElleKit (Standard jailbreak methods)
-        void* handles[] = {
-            dlopen("/usr/lib/libsubstrate.dylib", RTLD_LAZY),
-            dlopen("/var/lib/ellekit/ellekit.dylib", RTLD_LAZY),
-            dlopen("/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate", RTLD_LAZY),
-            dlopen("/usr/lib/libellekit.dylib", RTLD_LAZY),
-            dlopen("libsubstrate.dylib", RTLD_LAZY)
+        const char* libs[] = {
+            "/usr/lib/libsubstrate.dylib",
+            "/usr/lib/libellekit.dylib",
+            "/var/lib/ellekit/ellekit.dylib",
+            "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
+            "libsubstrate.dylib"
         };
-        
-        for (void* handle : handles) {
+        for (const char* path : libs) {
+            void* handle = dlopen(path, RTLD_LAZY | RTLD_NOLOAD);
+            if (!handle) handle = dlopen(path, RTLD_LAZY);
             if (handle) {
-                MSHookFunction_t hookFn = (MSHookFunction_t)dlsym(handle, "MSHookFunction");
-                if (hookFn) {
-                    hookFn(target, replacement, original);
-                    printf("[yt] Hooked successfully using MSHookFunction from jailbreak environment\n");
+                MSHookFunction_t fn = (MSHookFunction_t)dlsym(handle, "MSHookFunction");
+                if (fn) {
+                    fn(target, replacement, original);
+                    printf("[yt] MSHookFunction from %s OK\n", path);
                     return true;
                 }
             }
         }
 
-        // 2. Fallback to manual write-protection bypass byte-patching (e.g. Sideloads / TrollStore)
-        printf("[yt] Jailbreak hooks not found, falling back to manual byte-patching\n");
+        printf("[yt] Falling back to manual byte-patch\n");
         *original = target;
-
-        // Assembly patch: LDR X16, #8 ; BR X16
-        uint32_t patchInstructions[] = {
-            0x58000050, // LDR X16, 8
-            0xD61F0200  // BR X16
-        };
-
+        uint32_t patch[] = { 0x58000050, 0xD61F0200 };
         uint8_t payload[16];
-        memcpy(payload, patchInstructions, 8);
-        uintptr_t replacementAddress = (uintptr_t)replacement;
-        memcpy(payload + 8, &replacementAddress, 8);
-
+        memcpy(payload, patch, 8);
+        uintptr_t dst = (uintptr_t)replacement;
+        memcpy(payload + 8, &dst, 8);
         std::vector<uint8_t> patchBytes(payload, payload + 16);
         return Memory::Patch((uintptr_t)target, patchBytes);
     }
 
-    // Traverses block entities down to y=-64 safely on a separate thread to prevent FPS drops
     void ProcessContainerScanning(SDK::Player* localPlayer) {
         if (!localPlayer) return;
-
         SDK::BlockSource* region = localPlayer->getRegion();
         if (!region) return;
 
         std::vector<SDK::BlockEntity*> rawEntities = region->getBlockEntities();
         std::vector<MappedContainer> tempContainers;
-
         SDK::Vector3 localPos = localPlayer->getPosition();
 
-        for (auto* blockEntity : rawEntities) {
-            if (!blockEntity) continue;
-
-            SDK::Vector3 pos = blockEntity->getPosition();
-            
-            // Absolute depth check (detect down to bedrock layer y=-64)
+        for (auto* be : rawEntities) {
+            if (!be) continue;
+            SDK::Vector3 pos = be->getPosition();
             if (pos.y < -64.0f || pos.y > 320.0f) continue;
-
-            // Distance limit of 100 blocks to optimize performance and prevent visual clutter
             float dist = localPos.distance(pos);
             if (dist > 100.0f) continue;
 
-            int rawType = blockEntity->getType();
+            int rawType = be->getType();
             int mappedType = -1;
+            if      (rawType == 1  && filterChest)      mappedType = 1;
+            else if (rawType == 2  && filterEnderChest) mappedType = 2;
+            else if (rawType == 8  && filterHopper)     mappedType = 3;
+            else if (rawType == 6  && filterSpawner)    mappedType = 4;
+            else if (rawType == 10 && filterShulker)    mappedType = 5;
+            else if (rawType == 15 && filterBarrel)     mappedType = 6;
 
-            // Map and filter types dynamically
-            if (rawType == 1 && filterChest) mappedType = 1;       // Chest
-            else if (rawType == 2 && filterEnderChest) mappedType = 2; // EnderChest
-            else if (rawType == 8 && filterHopper) mappedType = 3;     // Hopper
-            else if (rawType == 6 && filterSpawner) mappedType = 4;    // Spawner
-            else if (rawType == 10 && filterShulker) mappedType = 5;   // Shulker (mapped to piston slot in old Pe engines)
-            else if (rawType == 15 && filterBarrel) mappedType = 6;    // Barrel
-
-            if (mappedType != -1) {
+            if (mappedType != -1)
                 tempContainers.push_back({ mappedType, pos, dist });
-            }
         }
 
-        // Thread-safe update of visual data
         std::lock_guard<std::mutex> lock(containerMutex);
         gScannedEntitiesCount = (int)tempContainers.size();
         detectedContainers = std::move(tempContainers);
     }
 
-    // Intercepted inventory transaction to capture LocalPlayer
-    void hkSendComplexInventoryTransaction(void* self, void* transaction) {
-        if (self) {
-            gLocalPlayer = (SDK::Player*)self;
-            gTickAddressResolved = 0x4AD18D0; // Visual debug indicator
+    // Her frame tetiklenen Client ECS tick fonksiyonu (0xA608634)
+    void hkClientTick(void* self) {
+        if (self && !gLocalPlayer) {
+            SDK::Player* candidate = *(SDK::Player**)((uintptr_t)self + 0x3E8);
+            if (candidate) {
+                SDK::Vector3 pos = candidate->getPosition();
+                if (pos.y > -200.0f && pos.y < 400.0f && pos.x != 0.0f) {
+                    gLocalPlayer = candidate;
+                    printf("[yt] LocalPlayer captured at 0x%p\n", candidate);
+                }
+            }
         }
-        if (oSendComplexInventoryTransaction) {
-            oSendComplexInventoryTransaction(self, transaction);
-        }
+        if (oClientTick) oClientTick(self);
     }
 
-    // Intercepted actor removal to safely clear tracking
     void hkRemoveActor(void* self, void* packet) {
         gLocalPlayer = nullptr;
         gTickAddressResolved = 0;
-        if (oRemoveActor) {
-            oRemoveActor(self, packet);
-        }
+        if (oRemoveActor) oRemoveActor(self, packet);
     }
 
     void Initialize() {
         uintptr_t base = Memory::GetBaseAddress();
-        printf("[yt] Initialize: Base address is 0x%lx\n", base);
-        
-        // 1. Hook sendComplexInventoryTransaction (retrieves LocalPlayer*)
-        uintptr_t transactionAddr = base + 0x4AD18D0;
-        bool hook1 = ApplyInlineHook((void*)transactionAddr, (void*)&hkSendComplexInventoryTransaction, (void**)&oSendComplexInventoryTransaction);
-        printf("[yt] Hook sendComplexInventoryTransaction result: %s at address 0x%lx\n", hook1 ? "SUCCESS" : "FAILED", transactionAddr);
-        
-        // 2. Hook RemoveActorPacket handler (resets LocalPlayer* on leave)
-        uintptr_t removeActorAddr = base + 0x43DA384;
-        bool hook2 = ApplyInlineHook((void*)removeActorAddr, (void*)&hkRemoveActor, (void**)&oRemoveActor);
-        printf("[yt] Hook RemoveActorPacket handler result: %s at address 0x%lx\n", hook2 ? "SUCCESS" : "FAILED", removeActorAddr);
+        printf("[yt] Base: 0x%lx\n", base);
+
+        uintptr_t tickAddr = base + 0xA608634;
+        bool r1 = ApplyInlineHook((void*)tickAddr, (void*)&hkClientTick, (void**)&oClientTick);
+        printf("[yt] ClientTick hook: %s @ 0x%lx\n", r1 ? "OK" : "FAIL", tickAddr);
+        // Hook başarıyla uygulandıysa anında HOOKED göster
+        if (r1) gTickAddressResolved = 0xA608634;
+
+        uintptr_t removeAddr = base + 0x43DA384;
+        bool r2 = ApplyInlineHook((void*)removeAddr, (void*)&hkRemoveActor, (void**)&oRemoveActor);
+        printf("[yt] RemoveActor hook: %s @ 0x%lx\n", r2 ? "OK" : "FAIL", removeAddr);
     }
 
-    void Terminate() {
-        // Safe tear down
-    }
+    void Terminate() {}
 }
