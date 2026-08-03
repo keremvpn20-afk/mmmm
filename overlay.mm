@@ -130,7 +130,7 @@ static NSString* NameForContainer(int type) {
                 CGContextMoveToPoint(context, screenCenter.x, screenCenter.y);
                 CGContextAddLineToPoint(context, screen.x, screen.y);
                 CGContextSetStrokeColorWithColor(context, color.CGColor);
-                CGContextSetLineWidth(0.8);
+                CGContextSetLineWidth(context, 0.8);
                 CGContextStrokePath(context);
             }
         }
