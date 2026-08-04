@@ -65,16 +65,18 @@ namespace Hooks {
 
             std::vector<MappedContainer> temp;
             mach_port_t task = mach_task_self();
-            mach_vm_address_t address = 0;
-            mach_vm_size_t size = 0;
+            
+            // APPLE IOS UYUMLU DEGISTIRILDI: mach_vm_... yerine vm_... kullanilacak
+            vm_address_t address = 0;
+            vm_size_t size = 0;
             vm_region_basic_info_data_64_t info;
             mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
             mach_port_t object_name;
 
             int totalFound = 0;
 
-            // Tum RAM'i gez
-            while (mach_vm_region(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name) == KERN_SUCCESS) {
+            // Tüm RAM'i gez - IOS Uyumlu vm_region_64
+            while (vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name) == KERN_SUCCESS) {
                 
                 if ((info.protection & VM_PROT_READ) && (info.protection & VM_PROT_WRITE)) {
                     
@@ -82,8 +84,8 @@ namespace Hooks {
                     uint8_t* buf = (uint8_t*)malloc(chunkSize);
                     
                     if (buf) {
-                        for (mach_vm_address_t chunkStart = address; chunkStart < address + size; chunkStart += chunkSize) {
-                            mach_vm_size_t readSize = (address + size - chunkStart < chunkSize) ? (address + size - chunkStart) : chunkSize;
+                        for (vm_address_t chunkStart = address; chunkStart < address + size; chunkStart += chunkSize) {
+                            vm_size_t readSize = (address + size - chunkStart < chunkSize) ? (address + size - chunkStart) : chunkSize;
                             vm_size_t readCount = readSize;
                             
                             if (vm_read_overwrite(task, chunkStart, readSize, (vm_address_t)buf, &readCount) == KERN_SUCCESS) {
