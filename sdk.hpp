@@ -2,7 +2,6 @@
 #include <vector>
 #include <cmath>
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
 #include <stdint.h>
 
 namespace SDK {
