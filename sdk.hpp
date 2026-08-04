@@ -1,8 +1,37 @@
 #pragma once
 #include <vector>
 #include <cmath>
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#include <stdint.h>
 
 namespace SDK {
+
+    // --- YENI GUVENLI OKUMA (Kernel Level) ---
+    template<typename T>
+    inline T SafeRead(uintptr_t addr) {
+        if (!addr) return T{};
+        T val{};
+        vm_size_t readCount = sizeof(T);
+        // Eger adres gecersizse cokmek yerine bos (sifir) dondurur
+        vm_read_overwrite(mach_task_self(), (vm_address_t)addr, sizeof(T), (vm_address_t)&val, &readCount);
+        return val;
+    }
+
+    // Basit ve hizli gecerli RAM adresi kontrolu
+    inline bool IsValidPtr(uintptr_t ptr) {
+        // iOS'ta gecerli user-space pointerlar genellikle bu araliktadir
+        return (ptr > 0x100000000ULL && ptr < 0x8000000000ULL);
+    }
+
+    // 1.26.33 surumu icin buldugumuz global ClientInstance offseti
+    constexpr uintptr_t kClientInstancePtrOffset = 0x101D3A10;
+
+    inline uintptr_t GetClientInstance(uintptr_t base) {
+        return SafeRead<uintptr_t>(base + kClientInstancePtrOffset);
+    }
+
+    // ------------------------------------------
 
     struct Vector3 {
         float x, y, z;
@@ -16,9 +45,13 @@ namespace SDK {
             float dx = x - other.x;
             float dy = y - other.y;
             float dz = z - other.z;
-            return sqrtf(dx*dx + dy*dy + dz*dz);
+            return std::sqrt(dx*dx + dy*dy + dz*dz);
         }
     };
+
+    inline Vector3 GetPlayerPosition(uintptr_t localPlayer) {
+        return SafeRead<Vector3>(localPlayer + 0x4C0); // 1.26.33 Actor Pos offset
+    }
 
     struct Vector2 {
         float x, y;
@@ -46,61 +79,28 @@ namespace SDK {
         return true;
     }
 
+    // Dummy class yapilari (artik yeni Kernel Scanner kullandigimiz icin cogu gereksiz, ama uyumluluk icin duruyor)
     class Actor {
     public:
         Vector3 getPosition() {
-            // Pos coordinate vector located inside Actor properties
-            return *(Vector3*)((uintptr_t)this + 0x4C0);
-        }
-        
-        bool isLocalPlayer() {
-            // Evaluates class identity using dynamic virtual pointer indexing (VTable)
-            typedef bool (*Func)(Actor*);
-            return ((Func)(*(uintptr_t**)this)[1])(this);
+            return SafeRead<Vector3>((uintptr_t)this + 0x4C0);
         }
     };
 
     class BlockEntity {
     public:
         Vector3 getPosition() {
-            return *(Vector3*)((uintptr_t)this + 0x2C);
+            return SafeRead<Vector3>((uintptr_t)this + 0x2C);
         }
         
         int getType() {
-            // Mapping types: 1 = Chest, 2 = EnderChest, 8 = Hopper, 6 = Spawner, 10 = Piston, 15 = Barrel
-            return *(int*)((uintptr_t)this + 0x24);
+            return SafeRead<int>((uintptr_t)this + 0x24);
         }
     };
 
     class BlockSource {
-    public:
-        std::vector<BlockEntity*> getBlockEntities() {
-            std::vector<BlockEntity*> list;
-            
-            // Traverses BlockEntity list safely
-            uintptr_t listStart = *(uintptr_t*)((uintptr_t)this + 0x48);
-            uintptr_t listEnd = *(uintptr_t*)((uintptr_t)this + 0x50);
-            
-            if (listStart && listEnd && listEnd > listStart) {
-                size_t count = (listEnd - listStart) / sizeof(void*);
-                // Clamp container checks to avoid memory overflow crashes
-                if (count > 2000) count = 2000; 
-
-                for (size_t i = 0; i < count; i++) {
-                    BlockEntity* entity = *(BlockEntity**)(listStart + i * sizeof(void*));
-                    if (entity) {
-                        list.push_back(entity);
-                    }
-                }
-            }
-            return list;
-        }
     };
 
     class Player : public Actor {
-    public:
-        BlockSource* getRegion() {
-            return *(BlockSource**)((uintptr_t)this + 0x358);
-        }
     };
 }
