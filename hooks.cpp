@@ -4,6 +4,8 @@
 #include <mutex>
 #include <thread>
 #include <chrono>
+#include <fstream>
+#include <sstream>
 
 namespace Hooks {
 
@@ -21,17 +23,13 @@ namespace Hooks {
 
     SDK::Player* gLocalPlayer = nullptr;
 
-    // Menudeki "Tick Status" ve "Scanned Entities" degerlerini bu degiskenler belirliyor
-    uintptr_t gTickAddressResolved = 0; 
+    uintptr_t gTickAddressResolved = 0;
     int gScannedEntitiesCount = 0;
     uintptr_t gDebugBlockSource = 0;
     int gDebugListSize = 0;
+    bool triggerMemoryDump = false;
 
     static uintptr_t sCalibratedOffset = 0;
-
-    static int autoPosOffset = -1;
-    static int autoTypeOffset = -1;
-    static int autoChestTypeVal = -1;
 
     static uintptr_t FindLocalPlayerOffset(uintptr_t clientInstance) {
         for (uintptr_t off = 0x150; off <= 0x280; off += 8) {
@@ -57,25 +55,33 @@ namespace Hooks {
 
     void MemoryScannerLoop() {
         while (scannerRunning) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
             
-            // Eğer ESP kapalıysa bile "HOOKED" sinyali göndermeye devam et ki menü hata vermesin
-            gTickAddressResolved = 0x7777; 
+            gTickAddressResolved = 0x7777; // Calisiyor isareti
 
-            if (!storageEspEnabled || !gLocalPlayer) {
+            if (!triggerMemoryDump) {
+                continue; // Sadece DUMP butonuna basinca tarama yapar
+            }
+
+            if (!gLocalPlayer) {
+                triggerMemoryDump = false;
                 continue;
             }
 
             SDK::Vector3 playerPos = SDK::GetPlayerPosition((uintptr_t)gLocalPlayer);
-            if (playerPos.y < -64.f || playerPos.y > 320.f) {
-                continue;
-            }
-
             int pX = (int)std::floor(playerPos.x);
             int pY = (int)std::floor(playerPos.y);
             int pZ = (int)std::floor(playerPos.z);
 
-            std::vector<MappedContainer> temp;
+            // iOS app sandbox dokumanlar klasoru
+            NSString *docPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+            NSString *filePath = [docPath stringByAppendingPathComponent:@"minecraft_memory_dump.txt"];
+            std::ofstream dumpFile([filePath UTF8String], std::ios_base::app);
+            
+            dumpFile << "\n============================================\n";
+            dumpFile << "MEMORY DUMP STARTED! Player Position: X=" << pX << " Y=" << pY << " Z=" << pZ << "\n";
+            dumpFile << "============================================\n";
+
             mach_port_t task = mach_task_self();
             vm_address_t address = 0;
             vm_size_t size = 0;
@@ -83,14 +89,14 @@ namespace Hooks {
             mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
             mach_port_t object_name;
 
-            int totalFound = 0;
+            int foundCount = 0;
             uintptr_t base = Memory::GetBaseAddress();
 
             while (vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name) == KERN_SUCCESS) {
                 
                 if ((info.protection & VM_PROT_READ) && (info.protection & VM_PROT_WRITE)) {
                     
-                    size_t chunkSize = 1024 * 1024; // 1 MB Buffer
+                    size_t chunkSize = 1024 * 1024;
                     uint8_t* buf = (uint8_t*)malloc(chunkSize);
                     
                     if (buf) {
@@ -100,87 +106,59 @@ namespace Hooks {
                             
                             if (vm_read_overwrite(task, chunkStart, readSize, (vm_address_t)buf, &readCount) == KERN_SUCCESS) {
                                 
-                                for (size_t offset = 0x40; offset < readSize - 0x40; offset += 4) {
+                                for (size_t offset = 0x100; offset < readSize - 0x100; offset += 4) {
                                     
-                                    // YENI YAPAY ZEKA KALIBRASYONU: Sandigin ustune cik
-                                    if (autoPosOffset == -1) {
-                                        int bx = *(int*)(buf + offset);
-                                        int by = *(int*)(buf + offset + 4);
-                                        int bz = *(int*)(buf + offset + 8);
+                                    int bx = *(int*)(buf + offset);
+                                    int by = *(int*)(buf + offset + 4);
+                                    int bz = *(int*)(buf + offset + 8);
+                                    
+                                    // Oyuncu Sandigin Ustundeyse (Y veya Y-1 eslesir)
+                                    if (bx == pX && bz == pZ && (by == pY || by == pY - 1 || by == pY - 2)) {
                                         
-                                        // Oyuncu sandigin ustundeyse (pY veya pY-1)
-                                        if (bx == pX && (by == pY - 1 || by == pY) && bz == pZ) {
-                                            for (int i = 0; i <= 0x40; i += 8) {
-                                                uintptr_t ptr = *(uintptr_t*)(buf + offset - i);
-                                                if (ptr > base && ptr < base + 0x15000000) {
-                                                    autoPosOffset = i;
-                                                    autoTypeOffset = i - 8;
-                                                    autoChestTypeVal = *(int*)(buf + offset - 8);
-                                                    
-                                                    if (autoChestTypeVal < 1 || autoChestTypeVal > 30) {
-                                                        autoTypeOffset = i - 4;
-                                                        autoChestTypeVal = *(int*)(buf + offset - 4);
-                                                    }
-                                                    gTickAddressResolved = 0x9999; // Kalibrasyon Basarili Sinyali
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    } 
-                                    // KALIBRASYON YAPILDIYSA (0x9999) CIZ
-                                    else {
-                                        int bx = *(int*)(buf + offset);
-                                        int by = *(int*)(buf + offset + 4);
-                                        int bz = *(int*)(buf + offset + 8);
-
-                                        if (by > -64 && by < 320) {
-                                            int type = *(int*)(buf + offset - autoPosOffset + autoTypeOffset);
-                                            uintptr_t ptr = *(uintptr_t*)(buf + offset - autoPosOffset);
+                                        dumpFile << "\n--- POTENTIAL BLOCK ENTITY FOUND AT ADDR: 0x" << std::hex << (chunkStart + offset) << std::dec << " ---\n";
+                                        dumpFile << "Match Coords: X=" << bx << " Y=" << by << " Z=" << bz << "\n";
+                                        dumpFile << "Dumping Memory 256 bytes BEFORE and 256 bytes AFTER:\n";
+                                        
+                                        for (int i = -0x100; i <= 0x100; i += 4) {
+                                            uintptr_t addr = chunkStart + offset + i;
+                                            int val_int = *(int*)(buf + offset + i);
+                                            float val_float = *(float*)(buf + offset + i);
+                                            uintptr_t val_ptr = *(uintptr_t*)(buf + offset + i);
                                             
-                                            if (ptr > base && ptr < base + 0x15000000) {
-                                                int dx = std::abs(bx - pX);
-                                                int dy = std::abs(by - pY);
-                                                int dz = std::abs(bz - pZ);
-                                                
-                                                if (dx < 150 && dy < 150 && dz < 150) {
-                                                    SDK::Vector3 pos = {(float)bx + 0.5f, (float)by + 0.5f, (float)bz + 0.5f};
-                                                    float dist = playerPos.distance(pos);
-                                                    
-                                                    int mapped = -1;
-                                                    if (type == autoChestTypeVal && filterChest) mapped = 1;
-                                                    
-                                                    if (mapped != -1) {
-                                                        temp.push_back({ mapped, pos, dist });
-                                                        totalFound++;
-                                                    }
-                                                }
-                                            }
+                                            dumpFile << "Offset " << (i > 0 ? "+" : "") << std::hex << i << std::dec 
+                                                     << "\t| Int: " << val_int 
+                                                     << "\t| Float: " << val_float 
+                                                     << "\t| Ptr: 0x" << std::hex << val_ptr << std::dec << "\n";
                                         }
+                                        dumpFile << "-------------------------------------------\n";
+                                        
+                                        foundCount++;
                                     }
                                 }
                             }
-                            if (totalFound > 5000) break;
+                            if (foundCount > 100) break; 
                         }
                         free(buf);
                     }
                 }
                 address += size;
-                if (totalFound > 5000) break;
+                if (foundCount > 100) break;
             }
             
-            std::lock_guard<std::mutex> lock(containerMutex);
-            gScannedEntitiesCount = (int)temp.size();
-            detectedContainers = std::move(temp);
+            dumpFile << "\nDump Complete! Found " << foundCount << " matching coordinate blocks.\n";
+            dumpFile.close();
+            
+            gDebugBlockSource = 0xD000D000; 
+            triggerMemoryDump = false; 
         }
     }
 
-    // Overlay (Ekrana Cizim) tarafindan tetiklenen ana fonksiyon
     void ProcessContainerScanning(SDK::Player* /*unused*/) {
         uintptr_t base = Memory::GetBaseAddress();
 
         uintptr_t clientInstance = SDK::GetClientInstance(base);
         if (!SDK::IsValidPtr(clientInstance)) {
-            // Arka plandaki thread ClientInstance'i bulamadiysa
+            gTickAddressResolved = 0xDEAD;
             return;
         }
 
@@ -188,19 +166,19 @@ namespace Hooks {
             sCalibratedOffset = FindLocalPlayerOffset(clientInstance);
 
         if (sCalibratedOffset == 0) {
+            gTickAddressResolved = 0xBEEF;
             return;
         }
 
         uintptr_t localPlayer = SDK::SafeRead<uintptr_t>(clientInstance + sCalibratedOffset);
         if (!SDK::IsValidPtr(localPlayer)) {
             sCalibratedOffset = 0; 
+            gTickAddressResolved = 0xDEAD;
             return;
         }
 
         gLocalPlayer = (SDK::Player*)localPlayer;
-        
-        // Menudeki "Tick Status: HOOKED" (0) yazmasini onleyen satiri kaldirdik
-        // Artik arkaplan thread'i gTickAddressResolved degerini yonetiyor.
+        gTickAddressResolved = sCalibratedOffset; 
     }
 
     void Initialize() {
