@@ -6,7 +6,7 @@
 @interface ClickGUIWindow : UIWindow
 @property (nonatomic, strong) UIButton *floatingButton;
 @property (nonatomic, strong) UIView *menuPanel;
-@property (nonatomic, strong) UIView *settingsPanel; // Expandable filtration drawer
+@property (nonatomic, strong) UIView *settingsPanel;
 @property (nonatomic, strong) UIPanGestureRecognizer *panGesture;
 @property (nonatomic, strong) UILabel *debugLabel;
 @end
@@ -20,34 +20,30 @@ static ClickGUIWindow *gGuiWindow = nil;
     if (self) {
         self.windowLevel = UIWindowLevelAlert + 1;
         self.backgroundColor = [UIColor clearColor];
-        self.hidden = NO; // Display window without stealing key focus from game window
+        self.hidden = NO; 
         
         [self createFloatingBubble];
         [self createMenuPanel];
         [self createSettingsPanel];
         
-        // Start stats refresh timer
         [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(updateDebugStats) userInfo:nil repeats:YES];
     }
     return self;
 }
 
-// 1. Draggable Floating Bubble
 - (void)createFloatingBubble {
     self.floatingButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.floatingButton.frame = CGRectMake(80, 80, 55, 55);
     self.floatingButton.layer.cornerRadius = 27.5;
     
-    // Meteor Client color aesthetic: Dark grey base with purple glow borders
     self.floatingButton.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.14 alpha:0.95];
     self.floatingButton.layer.borderWidth = 2.0;
     self.floatingButton.layer.borderColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0].CGColor;
     
     [self.floatingButton setTitle:@"M" forState:UIControlStateNormal];
-    [self.floatingButton setTitleColor:[UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0] forState:UIControlStateNormal]; // Orange title
+    [self.floatingButton setTitleColor:[UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0] forState:UIControlStateNormal]; 
     self.floatingButton.titleLabel.font = [UIFont systemFontOfSize:22.0 weight:UIFontWeightBold];
     
-    // Add shadow effects
     self.floatingButton.layer.shadowColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0].CGColor;
     self.floatingButton.layer.shadowOpacity = 0.5;
     self.floatingButton.layer.shadowOffset = CGSizeMake(0, 0);
@@ -55,7 +51,6 @@ static ClickGUIWindow *gGuiWindow = nil;
     
     [self.floatingButton addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
     
-    // Setup pan gesture to drag the button
     self.panGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [self.floatingButton addGestureRecognizer:self.panGesture];
     
@@ -66,7 +61,6 @@ static ClickGUIWindow *gGuiWindow = nil;
     CGPoint translation = [sender translationInView:self];
     CGPoint newCenter = CGPointMake(sender.view.center.x + translation.x, sender.view.center.y + translation.y);
     
-    // Clamp to screen bounds
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
     newCenter.x = fmax(sender.view.frame.size.width / 2, fmin(screenSize.width - sender.view.frame.size.width / 2, newCenter.x));
     newCenter.y = fmax(sender.view.frame.size.height / 2, fmin(screenSize.height - sender.view.frame.size.height / 2, newCenter.y));
@@ -75,24 +69,21 @@ static ClickGUIWindow *gGuiWindow = nil;
     [sender setTranslation:CGPointZero inView:self];
 }
 
-// 2. Sliding ClickGUI Module Selection Panel
 - (void)createMenuPanel {
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
     self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 290) / 2, 320, 290)];
     self.menuPanel.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.10 alpha:0.95];
     self.menuPanel.layer.cornerRadius = 10;
     self.menuPanel.layer.borderWidth = 1.5;
-    self.menuPanel.layer.borderColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0].CGColor; // Orange accent border
+    self.menuPanel.layer.borderColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0].CGColor; 
     self.menuPanel.hidden = YES;
     
-    // Title header
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 10, 200, 24)];
     titleLabel.text = @"METEOR CLIENT PE";
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightBold];
     [self.menuPanel addSubview:titleLabel];
     
-    // ----------------- Storage ESP Toggle Row -----------------
     UIView *espRow = [[UIView alloc] initWithFrame:CGRectMake(15, 55, 290, 45)];
     espRow.backgroundColor = [UIColor colorWithRed:0.14 green:0.14 blue:0.16 alpha:0.8];
     espRow.layer.cornerRadius = 6;
@@ -103,14 +94,12 @@ static ClickGUIWindow *gGuiWindow = nil;
     espLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
     [espRow addSubview:espLabel];
     
-    // Toggle switch
     UISwitch *espSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(225, 7, 51, 31)];
     espSwitch.on = Hooks::storageEspEnabled;
     espSwitch.onTintColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0];
     [espSwitch addTarget:self action:@selector(espToggled:) forControlEvents:UIControlEventValueChanged];
     [espRow addSubview:espSwitch];
     
-    // Three Dots button "..."
     UIButton *dotsButton = [UIButton buttonWithType:UIButtonTypeCustom];
     dotsButton.frame = CGRectMake(180, 7, 35, 30);
     [dotsButton setTitle:@"..." forState:UIControlStateNormal];
@@ -121,7 +110,6 @@ static ClickGUIWindow *gGuiWindow = nil;
     
     [self.menuPanel addSubview:espRow];
     
-    // ----------------- Debug Statistics Label -----------------
     UIView *debugRow = [[UIView alloc] initWithFrame:CGRectMake(15, 110, 290, 115)];
     debugRow.backgroundColor = [UIColor colorWithRed:0.04 green:0.04 blue:0.06 alpha:0.85];
     debugRow.layer.cornerRadius = 6;
@@ -129,16 +117,15 @@ static ClickGUIWindow *gGuiWindow = nil;
     debugRow.layer.borderColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0].CGColor;
     
     self.debugLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 5, 270, 105)];
-    self.debugLabel.textColor = [UIColor colorWithRed:0.0 green:0.94 blue:0.45 alpha:1.0]; // Bright green font
+    self.debugLabel.textColor = [UIColor colorWithRed:0.0 green:0.94 blue:0.45 alpha:1.0]; 
     self.debugLabel.font = [UIFont fontWithName:@"Courier" size:9.0] ?: [UIFont systemFontOfSize:9.0 weight:UIFontWeightBold];
     self.debugLabel.numberOfLines = 0;
     self.debugLabel.text = @"DEBUG STATS:\nRetrieving binary info...\nWaiting for application launch hooks...";
     [debugRow addSubview:self.debugLabel];
     [self.menuPanel addSubview:debugRow];
     
-    // Close button
     UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(15, 240, 290, 35);
+    closeBtn.frame = CGRectMake(15, 200, 290, 35);
     closeBtn.backgroundColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:0.3];
     closeBtn.layer.cornerRadius = 6;
     [closeBtn setTitle:@"CLOSE MENU" forState:UIControlStateNormal];
@@ -146,20 +133,27 @@ static ClickGUIWindow *gGuiWindow = nil;
     closeBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
     [closeBtn addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
     [self.menuPanel addSubview:closeBtn];
+
+    UIButton *dumpBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    dumpBtn.frame = CGRectMake(15, 245, 290, 35);
+    dumpBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.94 blue:0.12 alpha:0.3];
+    dumpBtn.layer.cornerRadius = 6;
+    [dumpBtn setTitle:@"DUMP MEMORY" forState:UIControlStateNormal];
+    [dumpBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    dumpBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
+    [dumpBtn addTarget:self action:@selector(dumpMemory) forControlEvents:UIControlEventTouchUpInside];
+    [self.menuPanel addSubview:dumpBtn];
     
     [self addSubview:self.menuPanel];
 }
 
-// 3. Filtration Drawer (The Sub-Settings Panel for ESP and Tracers)
 - (void)createSettingsPanel {
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
-    
-    // Appears on the right side of the main menu panel
     self.settingsPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2 + 330, (screenSize.height - 360) / 2, 280, 360)];
     self.settingsPanel.backgroundColor = [UIColor colorWithRed:0.06 green:0.06 blue:0.08 alpha:0.98];
     self.settingsPanel.layer.cornerRadius = 10;
     self.settingsPanel.layer.borderWidth = 1.5;
-    self.settingsPanel.layer.borderColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0].CGColor; // Purple border
+    self.settingsPanel.layer.borderColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0].CGColor; 
     self.settingsPanel.hidden = YES;
     
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(15, 12, 200, 20)];
@@ -168,16 +162,13 @@ static ClickGUIWindow *gGuiWindow = nil;
     title.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightBold];
     [self.settingsPanel addSubview:title];
     
-    // Scroll view for settings
     UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(10, 45, 260, 300)];
     scrollView.contentSize = CGSizeMake(260, 380);
     
     float yOffset = 5;
     
-    // Tracer Switch
     [self addSwitchToView:scrollView title:@"Draw Tracers" value:Hooks::drawTracers action:@selector(tracerToggled:) y:&yOffset];
     
-    // Separator line
     UIView *sep = [[UIView alloc] initWithFrame:CGRectMake(5, yOffset + 5, 240, 1)];
     sep.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0];
     [scrollView addSubview:sep];
@@ -190,7 +181,6 @@ static ClickGUIWindow *gGuiWindow = nil;
     [scrollView addSubview:filterTitle];
     yOffset += 22;
     
-    // Filter toggles
     [self addSwitchToView:scrollView title:@"Chests" value:Hooks::filterChest action:@selector(chestFilterToggled:) y:&yOffset];
     [self addSwitchToView:scrollView title:@"Ender Chests" value:Hooks::filterEnderChest action:@selector(enderFilterToggled:) y:&yOffset];
     [self addSwitchToView:scrollView title:@"Shulker Boxes" value:Hooks::filterShulker action:@selector(shulkerFilterToggled:) y:&yOffset];
@@ -202,7 +192,6 @@ static ClickGUIWindow *gGuiWindow = nil;
     [self addSubview:self.settingsPanel];
 }
 
-// Helper to quickly build checkbox rows
 - (void)addSwitchToView:(UIView *)view title:(NSString *)title value:(bool)val action:(SEL)act y:(float *)y {
     UIView *row = [[UIView alloc] initWithFrame:CGRectMake(5, *y, 240, 36)];
     row.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.14 alpha:0.6];
@@ -216,7 +205,7 @@ static ClickGUIWindow *gGuiWindow = nil;
     
     UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(180, 3, 51, 31)];
     sw.on = val;
-    sw.transform = CGAffineTransformMakeScale(0.75, 0.75); // Compact fit
+    sw.transform = CGAffineTransformMakeScale(0.75, 0.75); 
     sw.onTintColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0];
     [sw addTarget:self action:act forControlEvents:UIControlEventValueChanged];
     [row addSubview:sw];
@@ -225,12 +214,23 @@ static ClickGUIWindow *gGuiWindow = nil;
     *y += 42;
 }
 
-// ----------------- Action Event Observers -----------------
+- (void)dumpMemory {
+    Hooks::triggerMemoryDump = true;
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Memory Dumped!" message:@"A memory snapshot has been saved to your iOS Documents folder. Check the Files app." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
+    [alert addAction:ok];
+    
+    UIViewController *root = [UIApplication sharedApplication].keyWindow.rootViewController;
+    [root presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)updateDebugStats {
     uintptr_t baseAddr = (uintptr_t)_dyld_get_image_header(0);
-    self.debugLabel.text = [NSString stringWithFormat:@"DEBUG STATS:\nBase Address: 0x%lx\nTick Hook Addr: 0x%lx\nTick Status: %s\nScanned Entities: %d",
+    self.debugLabel.text = [NSString stringWithFormat:@"DEBUG STATS:\nBase: 0x%lx\nTick Addr: 0x%lx\nBS: 0x%lx\nTick Status: %s\nScanned Entities: %d",
                             baseAddr,
                             Hooks::gTickAddressResolved,
+                            Hooks::gDebugBlockSource,
                             (Hooks::gTickAddressResolved != 0 ? "HOOKED" : "FAILED"),
                             Hooks::gScannedEntitiesCount];
 }
@@ -278,11 +278,10 @@ static ClickGUIWindow *gGuiWindow = nil;
     self.settingsPanel.hidden = !self.settingsPanel.hidden;
 }
 
-// Override hitTest to allow interaction pass-through to game viewport on background clicks
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     UIView *hitView = [super hitTest:point withEvent:event];
     if (hitView == self) {
-        return nil; // Pass clicks to game
+        return nil; 
     }
     return hitView;
 }
