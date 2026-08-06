@@ -71,7 +71,9 @@ static ClickGUIWindow *gGuiWindow = nil;
 
 - (void)createMenuPanel {
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
-    self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 290) / 2, 320, 290)];
+    
+    // PENCERE BOYUNU 350 YAPTIK (Butonlar sığsın diye)
+    self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 350) / 2, 320, 350)];
     self.menuPanel.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.10 alpha:0.95];
     self.menuPanel.layer.cornerRadius = 10;
     self.menuPanel.layer.borderWidth = 1.5;
@@ -123,20 +125,10 @@ static ClickGUIWindow *gGuiWindow = nil;
     self.debugLabel.text = @"DEBUG STATS:\nRetrieving binary info...\nWaiting for application launch hooks...";
     [debugRow addSubview:self.debugLabel];
     [self.menuPanel addSubview:debugRow];
-    
-    UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(15, 200, 290, 35);
-    closeBtn.backgroundColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:0.3];
-    closeBtn.layer.cornerRadius = 6;
-    [closeBtn setTitle:@"CLOSE MENU" forState:UIControlStateNormal];
-    [closeBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    closeBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
-    [closeBtn addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
-    [self.menuPanel addSubview:closeBtn];
 
-    // İŞTE SENİN DUMP BUTONUN BURADA :)
+    // İŞTE YENİ DUMP MEMORY BUTONU
     UIButton *dumpBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    dumpBtn.frame = CGRectMake(15, 245, 290, 35);
+    dumpBtn.frame = CGRectMake(15, 240, 290, 35);
     dumpBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.94 blue:0.12 alpha:0.3];
     dumpBtn.layer.cornerRadius = 6;
     [dumpBtn setTitle:@"DUMP MEMORY" forState:UIControlStateNormal];
@@ -144,6 +136,17 @@ static ClickGUIWindow *gGuiWindow = nil;
     dumpBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
     [dumpBtn addTarget:self action:@selector(dumpMemory) forControlEvents:UIControlEventTouchUpInside];
     [self.menuPanel addSubview:dumpBtn];
+    
+    // CLOSE MENU BUTONU EN ALTA ALINDI
+    UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    closeBtn.frame = CGRectMake(15, 290, 290, 35);
+    closeBtn.backgroundColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:0.3];
+    closeBtn.layer.cornerRadius = 6;
+    [closeBtn setTitle:@"CLOSE MENU" forState:UIControlStateNormal];
+    [closeBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    closeBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
+    [closeBtn addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
+    [self.menuPanel addSubview:closeBtn];
     
     [self addSubview:self.menuPanel];
 }
