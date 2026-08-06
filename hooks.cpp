@@ -57,10 +57,10 @@ namespace Hooks {
         while (scannerRunning) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             
-            gTickAddressResolved = 0x7777; // Calisiyor isareti
+            gTickAddressResolved = 0x7777;
 
             if (!triggerMemoryDump) {
-                continue; // Sadece DUMP butonuna basinca tarama yapar
+                continue; 
             }
 
             if (!gLocalPlayer) {
@@ -73,7 +73,6 @@ namespace Hooks {
             int pY = (int)std::floor(playerPos.y);
             int pZ = (int)std::floor(playerPos.z);
 
-            // iOS app sandbox dokumanlar klasoru
             NSString *docPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
             NSString *filePath = [docPath stringByAppendingPathComponent:@"minecraft_memory_dump.txt"];
             std::ofstream dumpFile([filePath UTF8String], std::ios_base::app);
@@ -90,7 +89,6 @@ namespace Hooks {
             mach_port_t object_name;
 
             int foundCount = 0;
-            uintptr_t base = Memory::GetBaseAddress();
 
             while (vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name) == KERN_SUCCESS) {
                 
@@ -112,7 +110,6 @@ namespace Hooks {
                                     int by = *(int*)(buf + offset + 4);
                                     int bz = *(int*)(buf + offset + 8);
                                     
-                                    // Oyuncu Sandigin Ustundeyse (Y veya Y-1 eslesir)
                                     if (bx == pX && bz == pZ && (by == pY || by == pY - 1 || by == pY - 2)) {
                                         
                                         dumpFile << "\n--- POTENTIAL BLOCK ENTITY FOUND AT ADDR: 0x" << std::hex << (chunkStart + offset) << std::dec << " ---\n";
