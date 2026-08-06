@@ -29,8 +29,6 @@ namespace Hooks {
     extern uintptr_t gDebugBlockSource;
     extern int gDebugListSize;
     extern SDK::Player* gLocalPlayer;
-    
-    // YENI DUMP TETIKLEYICISI
     extern bool triggerMemoryDump;
 
     void Initialize();
