@@ -134,6 +134,7 @@ static ClickGUIWindow *gGuiWindow = nil;
     [closeBtn addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
     [self.menuPanel addSubview:closeBtn];
 
+    // İŞTE SENİN DUMP BUTONUN BURADA :)
     UIButton *dumpBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     dumpBtn.frame = CGRectMake(15, 245, 290, 35);
     dumpBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.94 blue:0.12 alpha:0.3];
