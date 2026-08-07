@@ -60,27 +60,23 @@ namespace Hooks {
             
             gTickAddressResolved = 0x7777;
 
+            // Dump komutu gelmediyse bekle
             if (!triggerMemoryDump) {
                 continue; 
             }
 
-            if (!gLocalPlayer) {
-                triggerMemoryDump = false;
-                continue;
-            }
+            // ARTIK OYUNCUYU BULMASINI BEKLEMIYORUZ!
+            // Girdigin Koordinatlari direkt hafizada ariyoruz:
+            int pX = 2;
+            int pY = 64;
+            int pZ = 128;
 
-            SDK::Vector3 playerPos = SDK::GetPlayerPosition((uintptr_t)gLocalPlayer);
-            int pX = (int)std::floor(playerPos.x);
-            int pY = (int)std::floor(playerPos.y);
-            int pZ = (int)std::floor(playerPos.z);
-
-            // Dosya yolu daha guvenli olan tmp klasorune alindi
             const char* home = std::getenv("HOME");
             std::string filePath = std::string(home ? home : ".") + "/tmp/minecraft_memory_dump.txt";
             std::ofstream dumpFile(filePath, std::ios_base::app);
             
             dumpFile << "\n============================================\n";
-            dumpFile << "MEMORY DUMP STARTED! Player Position: X=" << pX << " Y=" << pY << " Z=" << pZ << "\n";
+            dumpFile << "HARDCODED MEMORY DUMP STARTED! Target Coords: X=" << pX << " Y=" << pY << " Z=" << pZ << "\n";
             dumpFile << "============================================\n";
 
             mach_port_t task = mach_task_self();
@@ -112,7 +108,8 @@ namespace Hooks {
                                     int by = *(int*)(buf + offset + 4);
                                     int bz = *(int*)(buf + offset + 8);
                                     
-                                    if (bx == pX && bz == pZ && (by == pY || by == pY - 1 || by == pY - 2)) {
+                                    // Y Koordinati sandigin blogu olabilecegi icin 1 yukari/asagi tolerans veriyoruz
+                                    if (bx == pX && bz == pZ && (by == pY || by == pY - 1 || by == pY - 2 || by == pY + 1)) {
                                         
                                         dumpFile << "\n--- POTENTIAL BLOCK ENTITY FOUND AT ADDR: 0x" << std::hex << (chunkStart + offset) << std::dec << " ---\n";
                                         dumpFile << "Match Coords: X=" << bx << " Y=" << by << " Z=" << bz << "\n";
