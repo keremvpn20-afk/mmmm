@@ -74,9 +74,9 @@ namespace Hooks {
             int pY = (int)std::floor(playerPos.y);
             int pZ = (int)std::floor(playerPos.z);
 
-            // SAF C++ ILE IOS DOCUMENTS KLASORUNU BULMA
+            // Dosya yolu daha guvenli olan tmp klasorune alindi
             const char* home = std::getenv("HOME");
-            std::string filePath = std::string(home ? home : ".") + "/Documents/minecraft_memory_dump.txt";
+            std::string filePath = std::string(home ? home : ".") + "/tmp/minecraft_memory_dump.txt";
             std::ofstream dumpFile(filePath, std::ios_base::app);
             
             dumpFile << "\n============================================\n";
