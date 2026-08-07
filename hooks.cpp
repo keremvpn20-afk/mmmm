@@ -15,7 +15,7 @@ namespace Hooks {
     bool filterHopper      = true;
     bool filterSpawner     = true;
     bool filterBarrel      = true;
-    bool drawTracers       = false; // Menüden bunu aktif etmeyi unutma!
+    bool drawTracers       = false;
 
     std::vector<MappedContainer> detectedContainers;
     std::mutex containerMutex;
@@ -24,9 +24,6 @@ namespace Hooks {
 
     uintptr_t gTickAddressResolved = 0;
     int gScannedEntitiesCount = 0;
-    uintptr_t gDebugBlockSource = 0;
-    int gDebugListSize = 0;
-    bool triggerMemoryDump = false;
 
     static std::thread* scannerThread = nullptr;
     static bool scannerRunning = false;
@@ -67,17 +64,7 @@ namespace Hooks {
                                 
                                 for (size_t offset = 8; offset < readSize - 0x50; offset += 4) {
                                     
-                                    int bx = *(int*)(buf + offset);
-                                    int by = *(int*)(buf + offset + 4);
-                                    int bz = *(int*)(buf + offset + 8);
-                                    
-                                    if (bx == 0 && by == 0 && bz == 0) continue;
-                                    
-                                    if (bx < -30000000 || bx > 30000000) continue;
-                                    if (by < -64 || by > 320) continue;
-                                    if (bz < -30000000 || bz > 30000000) continue;
-                                    
-                                    // SADECE GERÇEK SANDIK ID'LERİ (Çimenler Elendi)
+                                    // SADECE GERÇEK SANDIK ID'LERİ
                                     int type = *(int*)(buf + offset + 12);
                                     
                                     if (type == 54 || type == 130 || type == 154 || type == 52) {
@@ -85,47 +72,39 @@ namespace Hooks {
                                         uintptr_t vtable = *(uintptr_t*)(buf + offset - 8);
                                         if (vtable < 0x100000000) continue; 
                                         
-                                        float minX = *(float*)(buf + offset + 0x38);
-                                        float minY = *(float*)(buf + offset + 0x3C);
-                                        float minZ = *(float*)(buf + offset + 0x40);
+                                        // GHIDRA'DAN ALINAN GERÇEK KOORDİNAT OFSETLERİ (Integer - Tam Sayı)
+                                        int blockX = *(int*)(buf + offset + 0x2C);
+                                        int blockY = *(int*)(buf + offset + 0x30);
+                                        int blockZ = *(int*)(buf + offset + 0x34);
                                         
-                                        float maxX = *(float*)(buf + offset + 0x44);
-                                        float maxY = *(float*)(buf + offset + 0x48);
-                                        float maxZ = *(float*)(buf + offset + 0x4C);
-                                        
-                                        float diffX = maxX - minX;
-                                        float diffY = maxY - minY;
-                                        float diffZ = maxZ - minZ;
-                                        
-                                        if (diffX < 0.1f || diffX > 1.5f) continue;
-                                        if (diffY < 0.1f || diffY > 1.5f) continue;
-                                        if (diffZ < 0.1f || diffZ > 1.5f) continue;
+                                        if (blockX == 0 && blockY == 0 && blockZ == 0) continue;
+                                        if (blockX < -30000000 || blockX > 30000000) continue;
+                                        if (blockY < -64 || blockY > 320) continue;
+                                        if (blockZ < -30000000 || blockZ > 30000000) continue;
 
-                                        if (std::abs(minX - bx) <= 1.0f && std::abs(minY - by) <= 1.0f && std::abs(minZ - bz) <= 1.0f) {
-                                            
-                                            // Kopya Depo Sandıklarını Eler (Deduplication)
-                                            bool isDuplicate = false;
-                                            for (const auto& existing : tempContainers) {
-                                                if (existing.worldPos.x == (float)bx && existing.worldPos.y == (float)by && existing.worldPos.z == (float)bz) {
-                                                    isDuplicate = true;
-                                                    break;
-                                                }
+                                        // Kopya Sandıkları Eler (Deduplication)
+                                        bool isDuplicate = false;
+                                        for (const auto& existing : tempContainers) {
+                                            if (existing.worldPos.x == (float)blockX && existing.worldPos.y == (float)blockY && existing.worldPos.z == (float)blockZ) {
+                                                isDuplicate = true;
+                                                break;
                                             }
-                                            if (isDuplicate) continue;
-                                            
-                                            int mappedType = 0;
-                                            if (type == 54) mappedType = 1;      // Chest
-                                            else if (type == 130) mappedType = 2; // EnderChest
-                                            else if (type == 154) mappedType = 3; // Hopper
-                                            else if (type == 52)  mappedType = 4; // Spawner
+                                        }
+                                        if (isDuplicate) continue;
+                                        
+                                        int mappedType = 0;
+                                        if (type == 54) mappedType = 1;      // Chest
+                                        else if (type == 130) mappedType = 2; // EnderChest
+                                        else if (type == 154) mappedType = 3; // Hopper
+                                        else if (type == 52)  mappedType = 4; // Spawner
 
-                                            if (mappedType != 0) {
-                                                MappedContainer c;
-                                                c.type = mappedType;
-                                                c.worldPos = { (float)bx, (float)by, (float)bz };
-                                                c.distance = 0.0f; 
-                                                tempContainers.push_back(c);
-                                            }
+                                        if (mappedType != 0) {
+                                            MappedContainer c;
+                                            c.type = mappedType;
+                                            // Ekrana tam oturması için Y eksenine 0.5 ekliyoruz (Sandığın tam ortası)
+                                            c.worldPos = { (float)blockX, (float)blockY + 0.5f, (float)blockZ };
+                                            c.distance = 0.0f; 
+                                            tempContainers.push_back(c);
                                         }
                                     }
                                 }
