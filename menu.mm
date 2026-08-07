@@ -71,8 +71,6 @@ static ClickGUIWindow *gGuiWindow = nil;
 
 - (void)createMenuPanel {
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
-    
-    // Kutu boyunu 390 yaptik ki kopyalama butonu sigsin
     self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 390) / 2, 320, 390)];
     self.menuPanel.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.10 alpha:0.95];
     self.menuPanel.layer.cornerRadius = 10;
@@ -126,7 +124,7 @@ static ClickGUIWindow *gGuiWindow = nil;
     [debugRow addSubview:self.debugLabel];
     [self.menuPanel addSubview:debugRow];
 
-    // 1. DUMP MEMORY BUTONU
+    // DUMP MEMORY BUTONU
     UIButton *dumpBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     dumpBtn.frame = CGRectMake(15, 235, 290, 35);
     dumpBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.94 blue:0.12 alpha:0.3];
@@ -134,10 +132,10 @@ static ClickGUIWindow *gGuiWindow = nil;
     [dumpBtn setTitle:@"1) DUMP MEMORY" forState:UIControlStateNormal];
     [dumpBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     dumpBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
-    [dumpBtn addTarget:self action:@selector(dumpMemory) forControlEvents:UIControlEventTouchUpInside];
+    [dumpBtn addTarget:self action:@selector(dumpMemory:) forControlEvents:UIControlEventTouchUpInside];
     [self.menuPanel addSubview:dumpBtn];
     
-    // 2. YENI KOPYALAMA BUTONU
+    // KOPYALAMA BUTONU
     UIButton *copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     copyBtn.frame = CGRectMake(15, 280, 290, 35);
     copyBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.94 alpha:0.5];
@@ -145,7 +143,7 @@ static ClickGUIWindow *gGuiWindow = nil;
     [copyBtn setTitle:@"2) COPY TO CLIPBOARD" forState:UIControlStateNormal];
     [copyBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     copyBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
-    [copyBtn addTarget:self action:@selector(copyLogToClipboard) forControlEvents:UIControlEventTouchUpInside];
+    [copyBtn addTarget:self action:@selector(copyLogToClipboard:) forControlEvents:UIControlEventTouchUpInside];
     [self.menuPanel addSubview:copyBtn];
 
     // CLOSE MENU BUTONU
@@ -163,6 +161,7 @@ static ClickGUIWindow *gGuiWindow = nil;
 }
 
 - (void)createSettingsPanel {
+    // Ayni kaldi
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
     self.settingsPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2 + 330, (screenSize.height - 360) / 2, 280, 360)];
     self.settingsPanel.backgroundColor = [UIColor colorWithRed:0.06 green:0.06 blue:0.08 alpha:0.98];
@@ -229,50 +228,42 @@ static ClickGUIWindow *gGuiWindow = nil;
     *y += 42;
 }
 
-- (void)dumpMemory {
+- (void)dumpMemory:(UIButton *)sender {
     Hooks::triggerMemoryDump = true;
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Memory Dump Started!" message:@"Please wait 3 seconds for the RAM to be scanned, then press the COPY TO CLIPBOARD button." preferredStyle:UIAlertControllerStyleAlert];
-    UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
-    [alert addAction:ok];
-    
-    UIViewController *root = [UIApplication sharedApplication].keyWindow.rootViewController;
-    [root presentViewController:alert animated:YES completion:nil];
+    [sender setTitle:@"DUMPING... WAIT!" forState:UIControlStateNormal];
+    [sender setBackgroundColor:[UIColor orangeColor]];
 }
 
-// BU YENI FONKSIYON METIN DOSYASINI OKUYUP PANAYA (CLIPBOARD) KOPYALIYOR
-- (void)copyLogToClipboard {
+- (void)copyLogToClipboard:(UIButton *)sender {
     const char* home = std::getenv("HOME");
-    NSString *filePath = [NSString stringWithFormat:@"%s/Documents/minecraft_memory_dump.txt", home ? home : "."];
+    NSString *filePath = [NSString stringWithFormat:@"%s/tmp/minecraft_memory_dump.txt", home ? home : "."];
     
     NSError *error = nil;
     NSString *content = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:&error];
     
     if (content && content.length > 0) {
         [UIPasteboard generalPasteboard].string = content;
-        
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Success!" message:@"The logs have been copied to your phone's clipboard. You can now paste them anywhere." preferredStyle:UIAlertControllerStyleAlert];
-        UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
-        [alert addAction:ok];
-        UIViewController *root = [UIApplication sharedApplication].keyWindow.rootViewController;
-        [root presentViewController:alert animated:YES completion:nil];
+        [sender setTitle:@"COPIED! PASTE NOW" forState:UIControlStateNormal];
+        [sender setBackgroundColor:[UIColor colorWithRed:0.0 green:0.8 blue:0.0 alpha:1.0]];
+        self.debugLabel.text = @"LOGS COPIED SUCCESSFULLY! You can paste them here.";
     } else {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"File Not Found" message:@"The dump file is empty or hasn't been created yet. Press DUMP MEMORY first and wait." preferredStyle:UIAlertControllerStyleAlert];
-        UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
-        [alert addAction:ok];
-        UIViewController *root = [UIApplication sharedApplication].keyWindow.rootViewController;
-        [root presentViewController:alert animated:YES completion:nil];
+        [sender setTitle:@"FAILED! (CHECK DEBUG)" forState:UIControlStateNormal];
+        [sender setBackgroundColor:[UIColor redColor]];
+        self.debugLabel.text = [NSString stringWithFormat:@"COPY ERROR:\n%@", error ? error.localizedDescription : @"File is empty or not found"];
     }
 }
 
 - (void)updateDebugStats {
     uintptr_t baseAddr = (uintptr_t)_dyld_get_image_header(0);
-    self.debugLabel.text = [NSString stringWithFormat:@"DEBUG STATS:\nBase: 0x%lx\nTick Addr: 0x%lx\nBS: 0x%lx\nTick Status: %s\nScanned Entities: %d",
-                            baseAddr,
-                            Hooks::gTickAddressResolved,
-                            Hooks::gDebugBlockSource,
-                            (Hooks::gTickAddressResolved != 0 ? "HOOKED" : "FAILED"),
-                            Hooks::gScannedEntitiesCount];
+    // Hata mesaji yaziyorsa uzerine yazmasin diye kontrol
+    if (![self.debugLabel.text containsString:@"COPY ERROR"] && ![self.debugLabel.text containsString:@"COPIED SUCCESSFULLY"]) {
+        self.debugLabel.text = [NSString stringWithFormat:@"DEBUG STATS:\nBase: 0x%lx\nTick Addr: 0x%lx\nBS: 0x%lx\nTick Status: %s\nScanned Entities: %d",
+                                baseAddr,
+                                Hooks::gTickAddressResolved,
+                                Hooks::gDebugBlockSource,
+                                (Hooks::gTickAddressResolved != 0 ? "HOOKED" : "FAILED"),
+                                Hooks::gScannedEntitiesCount];
+    }
 }
 
 - (void)espToggled:(UISwitch *)sender {
