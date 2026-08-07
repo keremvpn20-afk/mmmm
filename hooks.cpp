@@ -24,6 +24,10 @@ namespace Hooks {
 
     uintptr_t gTickAddressResolved = 0;
     int gScannedEntitiesCount = 0;
+    
+    // Eksik olan değişkenler eklendi (Derleme hatasını çözer)
+    uintptr_t gDebugBlockSource = 0;
+    bool triggerMemoryDump = false;
 
     static std::thread* scannerThread = nullptr;
     static bool scannerRunning = false;
