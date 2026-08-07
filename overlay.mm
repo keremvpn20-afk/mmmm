@@ -18,9 +18,8 @@ static MainESPView *gEspView = nil;
     self = [super initWithFrame:frame];
     if (self) {
         self.backgroundColor = [UIColor clearColor];
-        self.userInteractionEnabled = NO; // Click-through layer
+        self.userInteractionEnabled = NO;
         
-        // Synced redraw loop at target refresh rate
         _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(redraw)];
         [_displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
     }
@@ -29,18 +28,12 @@ static MainESPView *gEspView = nil;
 
 - (void)redraw {
     if (Hooks::storageEspEnabled) {
-        if (Hooks::gLocalPlayer) {
-            // Synchronous instant scan on rendering thread
-            Hooks::ProcessContainerScanning(Hooks::gLocalPlayer);
-        }
         [self setNeedsDisplay];
     } else {
-        // Optimization: clear graphics context on toggle off
         self.layer.sublayers = nil;
     }
 }
 
-// Map corresponding container types to theme UI colors
 static UIColor* ColorForContainer(int type) {
     switch (type) {
         case 1: return [UIColor colorWithRed:0.94 green:0.62 blue:0.12 alpha:1.0]; // Chest: Gold-Orange
@@ -69,63 +62,86 @@ static NSString* NameForContainer(int type) {
     CGContextRef context = UIGraphicsGetCurrentContext();
     if (!context) return;
 
-    // ViewMatrix location in minecraftpe memory segment
     SDK::Matrix viewMatrix = *(SDK::Matrix*)(Memory::GetBaseAddress() + 0x2A00000);
 
     CGRect screenBounds = [UIScreen mainScreen].bounds;
     float width = screenBounds.size.width;
     float height = screenBounds.size.height;
-
-    // Center of screen for tracers origins
     CGPoint screenCenter = CGPointMake(width / 2.0f, height / 2.0f);
 
     std::vector<Hooks::MappedContainer> localList;
     {
-        // Safe access copy to avoid data mutations during drawing
-        extern std::mutex containerMutex; // Declared in Hooks namespace context
+        extern std::mutex containerMutex; 
         std::lock_guard<std::mutex> lock(Hooks::containerMutex);
         localList = Hooks::detectedContainers;
     }
 
+    // RADAR LISTESI ICIN Y KOORDINATI
+    int listYOffset = 150; 
+    
+    // Ekrana Liste Basligi
+    if (localList.size() > 0) {
+        NSString *title = [NSString stringWithFormat:@"FOUND CONTAINERS (%lu):", localList.size()];
+        NSDictionary *attr = @{
+            NSFontAttributeName: [UIFont systemFontOfSize:12.0 weight:UIFontWeightBlack],
+            NSForegroundColorAttributeName: [UIColor greenColor]
+        };
+        [title drawAtPoint:CGPointMake(15, listYOffset) withAttributes:attr];
+        listYOffset += 20;
+    }
+
     for (const auto& obj : localList) {
+        UIColor *color = ColorForContainer(obj.type);
+        
+        // 1. EKRANIN SOLUNA KESIN KOORDINAT LISTESI YAZDIR (3D KUTU BOZUK OLSA BILE BU %100 CALISIR)
+        NSString *listText = [NSString stringWithFormat:@"%@ -> X:%.0f  Y:%.0f  Z:%.0f", NameForContainer(obj.type), obj.worldPos.x, obj.worldPos.y, obj.worldPos.z];
+        
+        // Yaziya okunakli olmasi icin golge ekliyoruz
+        NSDictionary *shadowAttr = @{
+            NSFontAttributeName: [UIFont systemFontOfSize:11.0 weight:UIFontWeightBold],
+            NSForegroundColorAttributeName: [UIColor blackColor]
+        };
+        [listText drawAtPoint:CGPointMake(16, listYOffset + 1) withAttributes:shadowAttr];
+        
+        // Asil renkli yazi
+        NSDictionary *textAttr = @{
+            NSFontAttributeName: [UIFont systemFontOfSize:11.0 weight:UIFontWeightBold],
+            NSForegroundColorAttributeName: color
+        };
+        [listText drawAtPoint:CGPointMake(15, listYOffset) withAttributes:textAttr];
+        
+        listYOffset += 16;
+
+        // 2. 3D KUTU CIZIMI (Sadece ViewMatrix dogruysa ekranda gorunur, degilse hata vermez ama gozukmez)
         SDK::Vector2 screen{};
         if (SDK::WorldToScreen(obj.worldPos, screen, viewMatrix, width, height)) {
             
-            UIColor *color = ColorForContainer(obj.type);
-            NSString *labelName = [NSString stringWithFormat:@"%@ [%.1fm]", NameForContainer(obj.type), obj.distance];
+            NSString *labelName = [NSString stringWithFormat:@"%@", NameForContainer(obj.type)];
             
-            // Draw 2D ESP Box around container (estimated standard bounding box size 30x30)
             CGRect boxRect = CGRectMake(screen.x - 15, screen.y - 15, 30, 30);
             
-            // Draw outer black shadow for visibility
             CGContextSetStrokeColorWithColor(context, [UIColor blackColor].CGColor);
             CGContextSetLineWidth(context, 2.5);
             CGContextStrokeRect(context, boxRect);
 
-            // Draw primary color frame
             CGContextSetStrokeColorWithColor(context, color.CGColor);
             CGContextSetLineWidth(context, 1.2);
             CGContextStrokeRect(context, boxRect);
 
-            // Draw label indicator text
             NSDictionary *attributes = @{
                 NSFontAttributeName: [UIFont systemFontOfSize:9.0 weight:UIFontWeightBold],
                 NSForegroundColorAttributeName: color
             };
             [labelName drawAtPoint:CGPointMake(screen.x - 15, screen.y - 28) withAttributes:attributes];
 
-            // Render Tracer snap-lines if configured inside "..." sub-settings
             if (Hooks::drawTracers) {
                 CGContextBeginPath(context);
                 CGContextMoveToPoint(context, screenCenter.x, screenCenter.y);
                 CGContextAddLineToPoint(context, screen.x, screen.y);
-                
-                // Tracer shadow line
                 CGContextSetStrokeColorWithColor(context, [UIColor colorWithRed:0.0 green:0.0 blue:0.0 alpha:0.4].CGColor);
                 CGContextSetLineWidth(context, 2.0);
                 CGContextStrokePath(context);
 
-                // Main colored Tracer line
                 CGContextBeginPath(context);
                 CGContextMoveToPoint(context, screenCenter.x, screenCenter.y);
                 CGContextAddLineToPoint(context, screen.x, screen.y);
@@ -136,7 +152,6 @@ static NSString* NameForContainer(int type) {
         }
     }
 }
-
 @end
 
 namespace Overlay {
@@ -144,7 +159,6 @@ namespace Overlay {
         dispatch_async(dispatch_get_main_queue(), ^{
             gEspView = [[MainESPView alloc] initWithFrame:[UIScreen mainScreen].bounds];
             
-            // Link transparent viewport overlay to UIWindow hierarchy
             id delegate = [UIApplication sharedApplication].delegate;
             if (delegate && [delegate respondsToSelector:@selector(window)]) {
                 UIWindow *win = [delegate performSelector:@selector(window)];
