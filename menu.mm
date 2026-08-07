@@ -72,8 +72,8 @@ static ClickGUIWindow *gGuiWindow = nil;
 - (void)createMenuPanel {
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
     
-    // PENCERE BOYUNU 350 YAPTIK (Butonlar sığsın diye)
-    self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 350) / 2, 320, 350)];
+    // Kutu boyunu 390 yaptik ki kopyalama butonu sigsin
+    self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 390) / 2, 320, 390)];
     self.menuPanel.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.10 alpha:0.95];
     self.menuPanel.layer.cornerRadius = 10;
     self.menuPanel.layer.borderWidth = 1.5;
@@ -126,20 +126,31 @@ static ClickGUIWindow *gGuiWindow = nil;
     [debugRow addSubview:self.debugLabel];
     [self.menuPanel addSubview:debugRow];
 
-    // İŞTE YENİ DUMP MEMORY BUTONU
+    // 1. DUMP MEMORY BUTONU
     UIButton *dumpBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    dumpBtn.frame = CGRectMake(15, 240, 290, 35);
+    dumpBtn.frame = CGRectMake(15, 235, 290, 35);
     dumpBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.94 blue:0.12 alpha:0.3];
     dumpBtn.layer.cornerRadius = 6;
-    [dumpBtn setTitle:@"DUMP MEMORY" forState:UIControlStateNormal];
+    [dumpBtn setTitle:@"1) DUMP MEMORY" forState:UIControlStateNormal];
     [dumpBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     dumpBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
     [dumpBtn addTarget:self action:@selector(dumpMemory) forControlEvents:UIControlEventTouchUpInside];
     [self.menuPanel addSubview:dumpBtn];
     
-    // CLOSE MENU BUTONU EN ALTA ALINDI
+    // 2. YENI KOPYALAMA BUTONU
+    UIButton *copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    copyBtn.frame = CGRectMake(15, 280, 290, 35);
+    copyBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.94 alpha:0.5];
+    copyBtn.layer.cornerRadius = 6;
+    [copyBtn setTitle:@"2) COPY TO CLIPBOARD" forState:UIControlStateNormal];
+    [copyBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    copyBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
+    [copyBtn addTarget:self action:@selector(copyLogToClipboard) forControlEvents:UIControlEventTouchUpInside];
+    [self.menuPanel addSubview:copyBtn];
+
+    // CLOSE MENU BUTONU
     UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(15, 290, 290, 35);
+    closeBtn.frame = CGRectMake(15, 335, 290, 35);
     closeBtn.backgroundColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:0.3];
     closeBtn.layer.cornerRadius = 6;
     [closeBtn setTitle:@"CLOSE MENU" forState:UIControlStateNormal];
@@ -221,12 +232,37 @@ static ClickGUIWindow *gGuiWindow = nil;
 - (void)dumpMemory {
     Hooks::triggerMemoryDump = true;
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Memory Dumped!" message:@"A memory snapshot has been saved to your iOS Documents folder. Check the Files app." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Memory Dump Started!" message:@"Please wait 3 seconds for the RAM to be scanned, then press the COPY TO CLIPBOARD button." preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
     [alert addAction:ok];
     
     UIViewController *root = [UIApplication sharedApplication].keyWindow.rootViewController;
     [root presentViewController:alert animated:YES completion:nil];
+}
+
+// BU YENI FONKSIYON METIN DOSYASINI OKUYUP PANAYA (CLIPBOARD) KOPYALIYOR
+- (void)copyLogToClipboard {
+    const char* home = std::getenv("HOME");
+    NSString *filePath = [NSString stringWithFormat:@"%s/Documents/minecraft_memory_dump.txt", home ? home : "."];
+    
+    NSError *error = nil;
+    NSString *content = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:&error];
+    
+    if (content && content.length > 0) {
+        [UIPasteboard generalPasteboard].string = content;
+        
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Success!" message:@"The logs have been copied to your phone's clipboard. You can now paste them anywhere." preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
+        [alert addAction:ok];
+        UIViewController *root = [UIApplication sharedApplication].keyWindow.rootViewController;
+        [root presentViewController:alert animated:YES completion:nil];
+    } else {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"File Not Found" message:@"The dump file is empty or hasn't been created yet. Press DUMP MEMORY first and wait." preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
+        [alert addAction:ok];
+        UIViewController *root = [UIApplication sharedApplication].keyWindow.rootViewController;
+        [root presentViewController:alert animated:YES completion:nil];
+    }
 }
 
 - (void)updateDebugStats {
