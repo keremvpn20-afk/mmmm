@@ -15,7 +15,7 @@ namespace Hooks {
     bool filterHopper      = true;
     bool filterSpawner     = true;
     bool filterBarrel      = true;
-    bool drawTracers       = false;
+    bool drawTracers       = false; // Menüden bunu aktif etmeyi unutma!
 
     std::vector<MappedContainer> detectedContainers;
     std::mutex containerMutex;
@@ -65,29 +65,26 @@ namespace Hooks {
                             
                             if (vm_read_overwrite(task, chunkStart, readSize, (vm_address_t)buf, &readCount) == KERN_SUCCESS) {
                                 
-                                // Vtable'i kontrol edebilmek icin offset = 8'den basliyoruz
                                 for (size_t offset = 8; offset < readSize - 0x50; offset += 4) {
                                     
                                     int bx = *(int*)(buf + offset);
                                     int by = *(int*)(buf + offset + 4);
                                     int bz = *(int*)(buf + offset + 8);
                                     
-                                    // Sifir koordinatindaki sahte verileri ele
                                     if (bx == 0 && by == 0 && bz == 0) continue;
-
+                                    
                                     if (bx < -30000000 || bx > 30000000) continue;
                                     if (by < -64 || by > 320) continue;
                                     if (bz < -30000000 || bz > 30000000) continue;
                                     
+                                    // SADECE GERÇEK SANDIK ID'LERİ (Çimenler Elendi)
                                     int type = *(int*)(buf + offset + 12);
                                     
-                                    if (type == 2 || type == 23 || type == 25 || type == 15 || type == 5 || type == 42) {
+                                    if (type == 54 || type == 130 || type == 154 || type == 52) {
                                         
-                                        // VTable Sanity Check (Gercek bir C++ objesi mi kontrolu)
                                         uintptr_t vtable = *(uintptr_t*)(buf + offset - 8);
                                         if (vtable < 0x100000000) continue; 
                                         
-                                        // AABB Kutu Dogrulamasi (Kesin sonuc icin fiziksel boyutuna bakiyoruz)
                                         float minX = *(float*)(buf + offset + 0x38);
                                         float minY = *(float*)(buf + offset + 0x3C);
                                         float minZ = *(float*)(buf + offset + 0x40);
@@ -100,30 +97,27 @@ namespace Hooks {
                                         float diffY = maxY - minY;
                                         float diffZ = maxZ - minZ;
                                         
-                                        // Bir blogun boyutu 0.1'den kucuk, 2.5'ten buyuk O-LA-MAZ! (Bunu yapinca %99.9 sahteler elenir)
-                                        if (diffX < 0.1f || diffX > 2.5f) continue;
-                                        if (diffY < 0.1f || diffY > 2.5f) continue;
-                                        if (diffZ < 0.1f || diffZ > 2.5f) continue;
+                                        if (diffX < 0.1f || diffX > 1.5f) continue;
+                                        if (diffY < 0.1f || diffY > 1.5f) continue;
+                                        if (diffZ < 0.1f || diffZ > 1.5f) continue;
 
-                                        if (std::abs(minX - bx) <= 1.0f && 
-                                            std::abs(minY - by) <= 1.0f && 
-                                            std::abs(minZ - bz) <= 1.0f) {
+                                        if (std::abs(minX - bx) <= 1.0f && std::abs(minY - by) <= 1.0f && std::abs(minZ - bz) <= 1.0f) {
                                             
-                                            // Overlay'a uyumlu ID eslestirmesi ve Filtreler
-                                            if (type == 2 && !filterChest) continue;
-                                            if (type == 23 && !filterEnderChest) continue;
-                                            if (type == 25 && !filterShulker) continue;
-                                            if (type == 15 && !filterHopper) continue;
-                                            if (type == 5 && !filterSpawner) continue;
-                                            if (type == 42 && !filterBarrel) continue;
+                                            // Kopya Depo Sandıklarını Eler (Deduplication)
+                                            bool isDuplicate = false;
+                                            for (const auto& existing : tempContainers) {
+                                                if (existing.worldPos.x == (float)bx && existing.worldPos.y == (float)by && existing.worldPos.z == (float)bz) {
+                                                    isDuplicate = true;
+                                                    break;
+                                                }
+                                            }
+                                            if (isDuplicate) continue;
                                             
                                             int mappedType = 0;
-                                            if (type == 2) mappedType = 1;
-                                            else if (type == 23) mappedType = 2;
-                                            else if (type == 15) mappedType = 3;
-                                            else if (type == 5) mappedType = 4;
-                                            else if (type == 25) mappedType = 5;
-                                            else if (type == 42) mappedType = 6;
+                                            if (type == 54) mappedType = 1;      // Chest
+                                            else if (type == 130) mappedType = 2; // EnderChest
+                                            else if (type == 154) mappedType = 3; // Hopper
+                                            else if (type == 52)  mappedType = 4; // Spawner
 
                                             if (mappedType != 0) {
                                                 MappedContainer c;
