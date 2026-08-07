@@ -6,6 +6,7 @@
 #include <chrono>
 #include <fstream>
 #include <sstream>
+#include <cstdlib>
 
 namespace Hooks {
 
@@ -73,9 +74,10 @@ namespace Hooks {
             int pY = (int)std::floor(playerPos.y);
             int pZ = (int)std::floor(playerPos.z);
 
-            NSString *docPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-            NSString *filePath = [docPath stringByAppendingPathComponent:@"minecraft_memory_dump.txt"];
-            std::ofstream dumpFile([filePath UTF8String], std::ios_base::app);
+            // SAF C++ ILE IOS DOCUMENTS KLASORUNU BULMA
+            const char* home = std::getenv("HOME");
+            std::string filePath = std::string(home ? home : ".") + "/Documents/minecraft_memory_dump.txt";
+            std::ofstream dumpFile(filePath, std::ios_base::app);
             
             dumpFile << "\n============================================\n";
             dumpFile << "MEMORY DUMP STARTED! Player Position: X=" << pX << " Y=" << pY << " Z=" << pZ << "\n";
