@@ -4,9 +4,7 @@
 #include <mutex>
 #include <thread>
 #include <chrono>
-#include <fstream>
-#include <sstream>
-#include <cstdlib>
+#include <cmath>
 
 namespace Hooks {
 
@@ -30,63 +28,29 @@ namespace Hooks {
     int gDebugListSize = 0;
     bool triggerMemoryDump = false;
 
-    static uintptr_t sCalibratedOffset = 0;
-
-    static uintptr_t FindLocalPlayerOffset(uintptr_t clientInstance) {
-        for (uintptr_t off = 0x150; off <= 0x280; off += 8) {
-            uintptr_t candidate = SDK::SafeRead<uintptr_t>(clientInstance + off);
-            if (!SDK::IsValidPtr(candidate)) continue;
-
-            float posX = SDK::SafeRead<float>(candidate + 0x4C0 + 0);
-            float posY = SDK::SafeRead<float>(candidate + 0x4C0 + 4);
-            float posZ = SDK::SafeRead<float>(candidate + 0x4C0 + 8);
-
-            if (posY > -64.f && posY < 320.f &&
-                posX > -30000000.f && posX < 30000000.f &&
-                posZ > -30000000.f && posZ < 30000000.f &&
-                (posX != 0.f || posZ != 0.f)) {
-                return off;
-            }
-        }
-        return 0;
-    }
-
     static std::thread* scannerThread = nullptr;
     static bool scannerRunning = false;
 
     void MemoryScannerLoop() {
         while (scannerRunning) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
             
-            gTickAddressResolved = 0x7777;
-
-            // Dump komutu gelmediyse bekle
-            if (!triggerMemoryDump) {
+            if (!storageEspEnabled) {
+                // Eger ESP kapaliysa listeyi temizle
+                std::lock_guard<std::mutex> lock(containerMutex);
+                detectedContainers.clear();
+                gScannedEntitiesCount = 0;
                 continue; 
             }
 
-            // ARTIK OYUNCUYU BULMASINI BEKLEMIYORUZ!
-            // Girdigin Koordinatlari direkt hafizada ariyoruz:
-            int pX = 2;
-            int pY = 64;
-            int pZ = 128;
-
-            const char* home = std::getenv("HOME");
-            std::string filePath = std::string(home ? home : ".") + "/tmp/minecraft_memory_dump.txt";
-            std::ofstream dumpFile(filePath, std::ios_base::app);
+            std::vector<MappedContainer> tempContainers;
             
-            dumpFile << "\n============================================\n";
-            dumpFile << "HARDCODED MEMORY DUMP STARTED! Target Coords: X=" << pX << " Y=" << pY << " Z=" << pZ << "\n";
-            dumpFile << "============================================\n";
-
             mach_port_t task = mach_task_self();
             vm_address_t address = 0;
             vm_size_t size = 0;
             vm_region_basic_info_data_64_t info;
             mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
             mach_port_t object_name;
-
-            int foundCount = 0;
 
             while (vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name) == KERN_SUCCESS) {
                 
@@ -102,79 +66,75 @@ namespace Hooks {
                             
                             if (vm_read_overwrite(task, chunkStart, readSize, (vm_address_t)buf, &readCount) == KERN_SUCCESS) {
                                 
-                                for (size_t offset = 0x100; offset < readSize - 0x100; offset += 4) {
+                                for (size_t offset = 0; offset < readSize - 0x50; offset += 4) {
                                     
                                     int bx = *(int*)(buf + offset);
-                                    int by = *(int*)(buf + offset + 4);
-                                    int bz = *(int*)(buf + offset + 8);
+                                    if (bx < -30000000 || bx > 30000000) continue; // Mantikli kordinat araligi kontrolu
                                     
-                                    // Y Koordinati sandigin blogu olabilecegi icin 1 yukari/asagi tolerans veriyoruz
-                                    if (bx == pX && bz == pZ && (by == pY || by == pY - 1 || by == pY - 2 || by == pY + 1)) {
+                                    int by = *(int*)(buf + offset + 4);
+                                    if (by < -64 || by > 320) continue;
+                                    
+                                    int bz = *(int*)(buf + offset + 8);
+                                    if (bz < -30000000 || bz > 30000000) continue;
+                                    
+                                    int type = *(int*)(buf + offset + 12);
+                                    
+                                    // Menüdeki (Toggles) ayarlara gore filtreleme
+                                    if (type == 2 && !filterChest) continue;
+                                    if (type == 23 && !filterEnderChest) continue;
+                                    if (type == 25 && !filterShulker) continue;
+                                    if (type == 15 && !filterHopper) continue;
+                                    if (type == 5 && !filterSpawner) continue;
+                                    if (type == 42 && !filterBarrel) continue;
+                                    
+                                    // Senin overlay.mm cizici koduna uygun ID'lere ceviriyoruz
+                                    int mappedType = 0;
+                                    if (type == 2) mappedType = 1;
+                                    else if (type == 23) mappedType = 2;
+                                    else if (type == 15) mappedType = 3;
+                                    else if (type == 5) mappedType = 4;
+                                    else if (type == 25) mappedType = 5;
+                                    else if (type == 42) mappedType = 6;
+
+                                    if (mappedType != 0) {
+                                        // Sahte (Fake) sonuclari elemek icin AABB kutusu dogrulamasi
+                                        float minX = *(float*)(buf + offset + 0x38);
+                                        float minY = *(float*)(buf + offset + 0x3C);
+                                        float minZ = *(float*)(buf + offset + 0x40);
                                         
-                                        dumpFile << "\n--- POTENTIAL BLOCK ENTITY FOUND AT ADDR: 0x" << std::hex << (chunkStart + offset) << std::dec << " ---\n";
-                                        dumpFile << "Match Coords: X=" << bx << " Y=" << by << " Z=" << bz << "\n";
-                                        dumpFile << "Dumping Memory 256 bytes BEFORE and 256 bytes AFTER:\n";
-                                        
-                                        for (int i = -0x100; i <= 0x100; i += 4) {
-                                            uintptr_t addr = chunkStart + offset + i;
-                                            int val_int = *(int*)(buf + offset + i);
-                                            float val_float = *(float*)(buf + offset + i);
-                                            uintptr_t val_ptr = *(uintptr_t*)(buf + offset + i);
+                                        if (std::abs(minX - bx) <= 1.0f && 
+                                            std::abs(minY - by) <= 1.0f && 
+                                            std::abs(minZ - bz) <= 1.0f) {
                                             
-                                            dumpFile << "Offset " << (i > 0 ? "+" : "") << std::hex << i << std::dec 
-                                                     << "\t| Int: " << val_int 
-                                                     << "\t| Float: " << val_float 
-                                                     << "\t| Ptr: 0x" << std::hex << val_ptr << std::dec << "\n";
+                                            MappedContainer c;
+                                            c.type = mappedType;
+                                            c.worldPos = { (float)bx, (float)by, (float)bz };
+                                            c.distance = 0.0f; // Bizim sistemde distance hesaplamaya gerek yok
+                                            tempContainers.push_back(c);
                                         }
-                                        dumpFile << "-------------------------------------------\n";
-                                        
-                                        foundCount++;
                                     }
                                 }
                             }
-                            if (foundCount > 100) break; 
                         }
                         free(buf);
                     }
                 }
                 address += size;
-                if (foundCount > 100) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1)); // Oyunda takilma yapmamasi icin cok kisa dinlenme
             }
             
-            dumpFile << "\nDump Complete! Found " << foundCount << " matching coordinate blocks.\n";
-            dumpFile.close();
-            
-            gDebugBlockSource = 0xD000D000; 
-            triggerMemoryDump = false; 
+            {
+                // Tarama bitti! Yeni listeyi gonder!
+                std::lock_guard<std::mutex> lock(containerMutex);
+                detectedContainers = tempContainers;
+                gScannedEntitiesCount = tempContainers.size();
+                gTickAddressResolved = 0x1337; // ESP AKTIF MESAJI ICIN
+            }
         }
     }
 
-    void ProcessContainerScanning(SDK::Player* /*unused*/) {
-        uintptr_t base = Memory::GetBaseAddress();
-
-        uintptr_t clientInstance = SDK::GetClientInstance(base);
-        if (!SDK::IsValidPtr(clientInstance)) {
-            gTickAddressResolved = 0xDEAD;
-            return;
-        }
-
-        if (sCalibratedOffset == 0)
-            sCalibratedOffset = FindLocalPlayerOffset(clientInstance);
-
-        if (sCalibratedOffset == 0) {
-            gTickAddressResolved = 0xBEEF;
-            return;
-        }
-
-        uintptr_t localPlayer = SDK::SafeRead<uintptr_t>(clientInstance + sCalibratedOffset);
-        if (!SDK::IsValidPtr(localPlayer)) {
-            sCalibratedOffset = 0; 
-            gTickAddressResolved = 0xDEAD;
-            return;
-        }
-
-        gLocalPlayer = (SDK::Player*)localPlayer;
-        gTickAddressResolved = sCalibratedOffset; 
+    void ProcessContainerScanning(SDK::Player* localPlayer) {
+        if (localPlayer) gLocalPlayer = localPlayer;
     }
 
     void Initialize() {
