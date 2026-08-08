@@ -4,6 +4,7 @@
 #include <mutex>
 #include <thread>
 #include <chrono>
+#include <mach/mach.h>
 
 namespace Hooks {
 
@@ -20,150 +21,160 @@ namespace Hooks {
     std::mutex containerMutex;
 
     SDK::Player* gLocalPlayer = nullptr;
-
     uintptr_t gTickAddressResolved = 0;
     int gScannedEntitiesCount = 0;
-    
-    // Eski menü hata vermesin diye
     uintptr_t gDebugBlockSource = 0;
-    bool triggerMemoryDump = false;
 
     static std::thread* scannerThread = nullptr;
     static bool scannerRunning = false;
-    static uintptr_t sCalibratedOffset = 0;
+    static uintptr_t cachedPlayerPtr = 0;
 
-    // Oyuncunun Offsetini Otomatik Bulan Fonksiyon (Yanlışlıkla silmiştim, geri geldi!)
-    static uintptr_t FindLocalPlayerOffset(uintptr_t clientInstance) {
-        for (uintptr_t off = 0x150; off <= 0x280; off += 8) {
-            uintptr_t candidate = SDK::SafeRead<uintptr_t>(clientInstance + off);
-            if (!SDK::IsValidPtr(candidate)) continue;
+    static uintptr_t ScanForLocalPlayer() {
+        mach_port_t task = mach_task_self();
+        vm_address_t address = 0;
+        vm_size_t size = 0;
+        vm_region_basic_info_data_64_t info;
+        mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+        mach_port_t object_name;
 
-            float posX = SDK::SafeRead<float>(candidate + 0x4C0 + 0);
-            float posY = SDK::SafeRead<float>(candidate + 0x4C0 + 4);
-            float posZ = SDK::SafeRead<float>(candidate + 0x4C0 + 8);
+        while (vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64,
+                            (vm_region_info_t)&info, &info_count, &object_name) == KERN_SUCCESS) {
 
-            // Mantıklı koordinatlar arasındaysa bu gerçek oyuncudur
-            if (posY > -64.f && posY < 320.f &&
-                posX > -30000000.f && posX < 30000000.f &&
-                posZ > -30000000.f && posZ < 30000000.f &&
-                (posX != 0.f || posZ != 0.f)) {
-                return off;
+            if ((info.protection & VM_PROT_READ) && (info.protection & VM_PROT_WRITE) && size > 0x1000) {
+
+                size_t chunkSize = 4 * 1024 * 1024;
+                uint8_t* buf = (uint8_t*)malloc(chunkSize);
+                if (buf) {
+                    for (vm_address_t cs = address; cs < address + size; cs += chunkSize) {
+                        vm_size_t rs = ((address + size - cs) < chunkSize) ? (address + size - cs) : chunkSize;
+                        vm_size_t rc = rs;
+
+                        if (vm_read_overwrite(task, cs, rs, (vm_address_t)buf, &rc) == KERN_SUCCESS) {
+                            for (size_t off = 0; off + 8 <= rc; off += 8) {
+                                uintptr_t candidate = *(uintptr_t*)(buf + off);
+                                if (!SDK::IsValidPtr(candidate)) continue;
+
+                                float px = SDK::SafeRead<float>(candidate + 0x4C0);
+                                float py = SDK::SafeRead<float>(candidate + 0x4C4);
+                                float pz = SDK::SafeRead<float>(candidate + 0x4C8);
+
+                                if (py > -64.f && py < 320.f &&
+                                    px > -30000000.f && px < 30000000.f &&
+                                    pz > -30000000.f && pz < 30000000.f &&
+                                    (px != 0.f || pz != 0.f) && py != 0.f) {
+                                    
+                                    uintptr_t regionCheck = SDK::SafeRead<uintptr_t>(candidate + 0x358);
+                                    if (SDK::IsValidPtr(regionCheck)) {
+                                        free(buf);
+                                        return candidate;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    free(buf);
+                }
             }
+            address += size;
         }
         return 0;
     }
 
     void EntityScannerLoop() {
         while (scannerRunning) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
             if (!storageEspEnabled) {
                 std::lock_guard<std::mutex> lock(containerMutex);
                 detectedContainers.clear();
                 gScannedEntitiesCount = 0;
-                continue; 
-            }
-
-            // --- LOCAL PLAYER BULMA MANTIĞI (GERİ GELDİ) ---
-            uintptr_t base = Memory::GetBaseAddress();
-            uintptr_t clientInstance = SDK::GetClientInstance(base);
-            
-            if (!SDK::IsValidPtr(clientInstance)) {
-                gTickAddressResolved = 0xDEAD; // İŞTE "HOOK FAILED" VEREN YER!
+                gTickAddressResolved = 0;
                 continue;
             }
 
-            if (sCalibratedOffset == 0) {
-                sCalibratedOffset = FindLocalPlayerOffset(clientInstance);
+            if (!SDK::IsValidPtr(cachedPlayerPtr)) {
+                cachedPlayerPtr = ScanForLocalPlayer();
             }
-
-            if (sCalibratedOffset == 0) {
+            
+            if (!SDK::IsValidPtr(cachedPlayerPtr)) {
                 gTickAddressResolved = 0xDEAD;
                 continue;
             }
 
-            uintptr_t localPlayer = SDK::SafeRead<uintptr_t>(clientInstance + sCalibratedOffset);
-            if (!SDK::IsValidPtr(localPlayer)) {
-                sCalibratedOffset = 0; 
+            float checkY = SDK::SafeRead<float>(cachedPlayerPtr + 0x4C4);
+            if (checkY < -64.f || checkY > 320.f) {
+                cachedPlayerPtr = 0;
                 gTickAddressResolved = 0xDEAD;
                 continue;
             }
 
-            gLocalPlayer = (SDK::Player*)localPlayer;
-            // ---------------------------------------------
+            gLocalPlayer = (SDK::Player*)cachedPlayerPtr;
 
-            uintptr_t playerPtr = (uintptr_t)gLocalPlayer;
-            if (!SDK::IsValidPtr(playerPtr)) continue;
-            
-            uintptr_t regionPtr = 0;
-            if (SDK::IsValidPtr(playerPtr + 0x358)) {
-                regionPtr = *(uintptr_t*)(playerPtr + 0x358);
+            uintptr_t regionPtr = SDK::SafeRead<uintptr_t>(cachedPlayerPtr + 0x358);
+            gDebugBlockSource = regionPtr;
+
+            if (!SDK::IsValidPtr(regionPtr)) {
+                cachedPlayerPtr = 0;
+                gTickAddressResolved = 0xBEEF;
+                continue;
             }
-            if (!SDK::IsValidPtr(regionPtr)) continue;
+
+            uintptr_t listStart = SDK::SafeRead<uintptr_t>(regionPtr + 0x48);
+            uintptr_t listEnd   = SDK::SafeRead<uintptr_t>(regionPtr + 0x50);
 
             std::vector<MappedContainer> tempContainers;
 
-            if (SDK::IsValidPtr(regionPtr + 0x48) && SDK::IsValidPtr(regionPtr + 0x50)) {
-                uintptr_t listStart = *(uintptr_t*)(regionPtr + 0x48);
-                uintptr_t listEnd = *(uintptr_t*)(regionPtr + 0x50);
-                
-                if (SDK::IsValidPtr(listStart) && SDK::IsValidPtr(listEnd) && listEnd > listStart) {
-                    size_t count = (listEnd - listStart) / sizeof(void*);
-                    if (count > 2000) count = 2000; 
+            if (SDK::IsValidPtr(listStart) && SDK::IsValidPtr(listEnd) && listEnd > listStart) {
+                size_t count = (listEnd - listStart) / sizeof(void*);
+                if (count > 2000) count = 2000;
 
-                    for (size_t i = 0; i < count; i++) {
-                        if (!SDK::IsValidPtr(listStart + i * sizeof(void*))) continue;
-                        
-                        uintptr_t entityPtr = *(uintptr_t*)(listStart + i * sizeof(void*));
-                        if (!SDK::IsValidPtr(entityPtr)) continue;
-                        
-                        int rawType = 0;
-                        if (SDK::IsValidPtr(entityPtr + 0x24)) {
-                            rawType = *(int*)(entityPtr + 0x24);
-                        }
+                SDK::Vector3 playerPos = SDK::GetPlayerPosition(cachedPlayerPtr);
 
-                        int mappedType = 0;
-                        if (rawType == 1 && filterChest) mappedType = 1;           
-                        else if (rawType == 2 && filterEnderChest) mappedType = 2; 
-                        else if (rawType == 8 && filterHopper) mappedType = 3;     
-                        else if (rawType == 6 && filterSpawner) mappedType = 4;    
-                        else if (rawType == 15 && filterBarrel) mappedType = 6;    
-                        
-                        if (mappedType != 0) {
-                            if (SDK::IsValidPtr(entityPtr + 0x2C) && SDK::IsValidPtr(entityPtr + 0x34)) {
-                                int bx = *(int*)(entityPtr + 0x2C);
-                                int by = *(int*)(entityPtr + 0x30);
-                                int bz = *(int*)(entityPtr + 0x34);
-                                
-                                MappedContainer c;
-                                c.type = mappedType;
-                                c.worldPos = { (float)bx + 0.5f, (float)by + 0.5f, (float)bz + 0.5f }; 
-                                c.distance = 0.0f; 
-                                
-                                tempContainers.push_back(c);
-                            }
-                        }
+                for (size_t i = 0; i < count; i++) {
+                    uintptr_t entityPtr = SDK::SafeRead<uintptr_t>(listStart + i * sizeof(void*));
+                    if (!SDK::IsValidPtr(entityPtr)) continue;
+
+                    int rawType = SDK::SafeRead<int>(entityPtr + 0x24);
+
+                    int mappedType = 0;
+                    if      (rawType == 1  && filterChest)      mappedType = 1;
+                    else if (rawType == 2  && filterEnderChest) mappedType = 2;
+                    else if (rawType == 8  && filterHopper)     mappedType = 3;
+                    else if (rawType == 6  && filterSpawner)    mappedType = 4;
+                    else if (rawType == 15 && filterBarrel)     mappedType = 6;
+
+                    if (mappedType != 0) {
+                        int bx = SDK::SafeRead<int>(entityPtr + 0x2C);
+                        int by = SDK::SafeRead<int>(entityPtr + 0x30);
+                        int bz = SDK::SafeRead<int>(entityPtr + 0x34);
+
+                        if (bx == 0 && by == 0 && bz == 0) continue;
+                        if (by < -64 || by > 320) continue;
+
+                        MappedContainer c;
+                        c.type = mappedType;
+                        c.worldPos = { (float)bx + 0.5f, (float)by + 0.5f, (float)bz + 0.5f };
+                        c.distance = playerPos.distance(c.worldPos);
+                        tempContainers.push_back(c);
                     }
                 }
             }
-            
+
             {
                 std::lock_guard<std::mutex> lock(containerMutex);
                 detectedContainers = tempContainers;
-                gScannedEntitiesCount = tempContainers.size();
-                gTickAddressResolved = 0x1337; // HOOKED VE ÇALIŞIYOR
+                gScannedEntitiesCount = (int)tempContainers.size();
+                gTickAddressResolved = 0x1337;
             }
         }
     }
 
-    void ProcessContainerScanning(SDK::Player* localPlayer) {
-        // Artık buraya ihtiyaç yok, tarayıcı arka planda kendi buluyor.
-    }
+    void ProcessContainerScanning(SDK::Player* /*unused*/) {}
 
     void Initialize() {
         scannerRunning = true;
         scannerThread = new std::thread(EntityScannerLoop);
-        scannerThread->detach(); 
+        scannerThread->detach();
     }
 
     void Terminate() {
