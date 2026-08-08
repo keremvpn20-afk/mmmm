@@ -24,29 +24,77 @@ namespace Hooks {
     uintptr_t gTickAddressResolved = 0;
     int gScannedEntitiesCount = 0;
     
-    // Eski menü değişkenleri hata vermesin diye
+    // Eski menü hata vermesin diye
     uintptr_t gDebugBlockSource = 0;
     bool triggerMemoryDump = false;
 
     static std::thread* scannerThread = nullptr;
     static bool scannerRunning = false;
+    static uintptr_t sCalibratedOffset = 0;
 
-    // WURST TARZI SAF C++ BLOCK SOURCE TARAYICISI (SIFIR ÇÖKME / SIFIR KASMA)
+    // Oyuncunun Offsetini Otomatik Bulan Fonksiyon (Yanlışlıkla silmiştim, geri geldi!)
+    static uintptr_t FindLocalPlayerOffset(uintptr_t clientInstance) {
+        for (uintptr_t off = 0x150; off <= 0x280; off += 8) {
+            uintptr_t candidate = SDK::SafeRead<uintptr_t>(clientInstance + off);
+            if (!SDK::IsValidPtr(candidate)) continue;
+
+            float posX = SDK::SafeRead<float>(candidate + 0x4C0 + 0);
+            float posY = SDK::SafeRead<float>(candidate + 0x4C0 + 4);
+            float posZ = SDK::SafeRead<float>(candidate + 0x4C0 + 8);
+
+            // Mantıklı koordinatlar arasındaysa bu gerçek oyuncudur
+            if (posY > -64.f && posY < 320.f &&
+                posX > -30000000.f && posX < 30000000.f &&
+                posZ > -30000000.f && posZ < 30000000.f &&
+                (posX != 0.f || posZ != 0.f)) {
+                return off;
+            }
+        }
+        return 0;
+    }
+
     void EntityScannerLoop() {
         while (scannerRunning) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             
-            if (!storageEspEnabled || !gLocalPlayer) {
+            if (!storageEspEnabled) {
                 std::lock_guard<std::mutex> lock(containerMutex);
                 detectedContainers.clear();
                 gScannedEntitiesCount = 0;
                 continue; 
             }
 
+            // --- LOCAL PLAYER BULMA MANTIĞI (GERİ GELDİ) ---
+            uintptr_t base = Memory::GetBaseAddress();
+            uintptr_t clientInstance = SDK::GetClientInstance(base);
+            
+            if (!SDK::IsValidPtr(clientInstance)) {
+                gTickAddressResolved = 0xDEAD; // İŞTE "HOOK FAILED" VEREN YER!
+                continue;
+            }
+
+            if (sCalibratedOffset == 0) {
+                sCalibratedOffset = FindLocalPlayerOffset(clientInstance);
+            }
+
+            if (sCalibratedOffset == 0) {
+                gTickAddressResolved = 0xDEAD;
+                continue;
+            }
+
+            uintptr_t localPlayer = SDK::SafeRead<uintptr_t>(clientInstance + sCalibratedOffset);
+            if (!SDK::IsValidPtr(localPlayer)) {
+                sCalibratedOffset = 0; 
+                gTickAddressResolved = 0xDEAD;
+                continue;
+            }
+
+            gLocalPlayer = (SDK::Player*)localPlayer;
+            // ---------------------------------------------
+
             uintptr_t playerPtr = (uintptr_t)gLocalPlayer;
             if (!SDK::IsValidPtr(playerPtr)) continue;
             
-            // Oyuncunun BlockSource (Region) adresini çekiyoruz
             uintptr_t regionPtr = 0;
             if (SDK::IsValidPtr(playerPtr + 0x358)) {
                 regionPtr = *(uintptr_t*)(playerPtr + 0x358);
@@ -55,14 +103,13 @@ namespace Hooks {
 
             std::vector<MappedContainer> tempContainers;
 
-            // BlockEntity Listesinin Başlangıç ve Bitiş adreslerini okuyoruz (getBlockEntities mantığı)
             if (SDK::IsValidPtr(regionPtr + 0x48) && SDK::IsValidPtr(regionPtr + 0x50)) {
                 uintptr_t listStart = *(uintptr_t*)(regionPtr + 0x48);
                 uintptr_t listEnd = *(uintptr_t*)(regionPtr + 0x50);
                 
                 if (SDK::IsValidPtr(listStart) && SDK::IsValidPtr(listEnd) && listEnd > listStart) {
                     size_t count = (listEnd - listStart) / sizeof(void*);
-                    if (count > 2000) count = 2000; // FPS'i korumak için max 2000 sandık
+                    if (count > 2000) count = 2000; 
 
                     for (size_t i = 0; i < count; i++) {
                         if (!SDK::IsValidPtr(listStart + i * sizeof(void*))) continue;
@@ -70,7 +117,6 @@ namespace Hooks {
                         uintptr_t entityPtr = *(uintptr_t*)(listStart + i * sizeof(void*));
                         if (!SDK::IsValidPtr(entityPtr)) continue;
                         
-                        // TYPE KONTROLÜ (0x24 Offseti)
                         int rawType = 0;
                         if (SDK::IsValidPtr(entityPtr + 0x24)) {
                             rawType = *(int*)(entityPtr + 0x24);
@@ -84,7 +130,6 @@ namespace Hooks {
                         else if (rawType == 15 && filterBarrel) mappedType = 6;    
                         
                         if (mappedType != 0) {
-                            // GERÇEK KOORDİNATLAR (Tam Sayı / Integer olarak 0x2C'den okuyoruz!)
                             if (SDK::IsValidPtr(entityPtr + 0x2C) && SDK::IsValidPtr(entityPtr + 0x34)) {
                                 int bx = *(int*)(entityPtr + 0x2C);
                                 int by = *(int*)(entityPtr + 0x30);
@@ -106,15 +151,13 @@ namespace Hooks {
                 std::lock_guard<std::mutex> lock(containerMutex);
                 detectedContainers = tempContainers;
                 gScannedEntitiesCount = tempContainers.size();
-                gTickAddressResolved = 0x1337; 
+                gTickAddressResolved = 0x1337; // HOOKED VE ÇALIŞIYOR
             }
         }
     }
 
     void ProcessContainerScanning(SDK::Player* localPlayer) {
-        if (localPlayer && SDK::IsValidPtr((uintptr_t)localPlayer)) {
-            gLocalPlayer = localPlayer;
-        }
+        // Artık buraya ihtiyaç yok, tarayıcı arka planda kendi buluyor.
     }
 
     void Initialize() {
