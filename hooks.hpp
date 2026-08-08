@@ -5,18 +5,16 @@
 
 namespace Hooks {
     extern bool storageEspEnabled;
-    
     extern bool filterChest;
     extern bool filterEnderChest;
     extern bool filterShulker;
     extern bool filterHopper;
     extern bool filterSpawner;
     extern bool filterBarrel;
-    
     extern bool drawTracers;
 
     struct MappedContainer {
-        int type;
+        int type; // 1=Chest 2=EnderChest 3=Hopper 4=Spawner 5=Shulker 6=Barrel
         SDK::Vector3 worldPos;
         float distance;
     };
@@ -27,9 +25,7 @@ namespace Hooks {
     extern uintptr_t gTickAddressResolved;
     extern int gScannedEntitiesCount;
     extern uintptr_t gDebugBlockSource;
-    extern int gDebugListSize;
     extern SDK::Player* gLocalPlayer;
-    extern bool triggerMemoryDump;
 
     void Initialize();
     void Terminate();
