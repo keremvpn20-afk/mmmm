@@ -20,7 +20,7 @@ static ClickGUIWindow *gGuiWindow = nil;
     if (self) {
         self.windowLevel = UIWindowLevelAlert + 1;
         self.backgroundColor = [UIColor clearColor];
-        self.hidden = NO; 
+        self.hidden = NO;
         
         [self createFloatingBubble];
         [self createMenuPanel];
@@ -35,13 +35,12 @@ static ClickGUIWindow *gGuiWindow = nil;
     self.floatingButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.floatingButton.frame = CGRectMake(80, 80, 55, 55);
     self.floatingButton.layer.cornerRadius = 27.5;
-    
     self.floatingButton.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.14 alpha:0.95];
     self.floatingButton.layer.borderWidth = 2.0;
     self.floatingButton.layer.borderColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0].CGColor;
     
     [self.floatingButton setTitle:@"M" forState:UIControlStateNormal];
-    [self.floatingButton setTitleColor:[UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0] forState:UIControlStateNormal]; 
+    [self.floatingButton setTitleColor:[UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0] forState:UIControlStateNormal];
     self.floatingButton.titleLabel.font = [UIFont systemFontOfSize:22.0 weight:UIFontWeightBold];
     
     self.floatingButton.layer.shadowColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0].CGColor;
@@ -71,11 +70,11 @@ static ClickGUIWindow *gGuiWindow = nil;
 
 - (void)createMenuPanel {
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
-    self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 390) / 2, 320, 390)];
+    self.menuPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2, (screenSize.height - 300) / 2, 320, 300)];
     self.menuPanel.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.10 alpha:0.95];
     self.menuPanel.layer.cornerRadius = 10;
     self.menuPanel.layer.borderWidth = 1.5;
-    self.menuPanel.layer.borderColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0].CGColor; 
+    self.menuPanel.layer.borderColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:1.0].CGColor;
     self.menuPanel.hidden = YES;
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 10, 200, 24)];
@@ -110,45 +109,22 @@ static ClickGUIWindow *gGuiWindow = nil;
     
     [self.menuPanel addSubview:espRow];
     
-    UIView *debugRow = [[UIView alloc] initWithFrame:CGRectMake(15, 110, 290, 115)];
+    UIView *debugRow = [[UIView alloc] initWithFrame:CGRectMake(15, 110, 290, 100)];
     debugRow.backgroundColor = [UIColor colorWithRed:0.04 green:0.04 blue:0.06 alpha:0.85];
     debugRow.layer.cornerRadius = 6;
     debugRow.layer.borderWidth = 1.0;
     debugRow.layer.borderColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0].CGColor;
     
-    self.debugLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 5, 270, 105)];
-    self.debugLabel.textColor = [UIColor colorWithRed:0.0 green:0.94 blue:0.45 alpha:1.0]; 
+    self.debugLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 5, 270, 90)];
+    self.debugLabel.textColor = [UIColor colorWithRed:0.0 green:0.94 blue:0.45 alpha:1.0];
     self.debugLabel.font = [UIFont fontWithName:@"Courier" size:9.0] ?: [UIFont systemFontOfSize:9.0 weight:UIFontWeightBold];
     self.debugLabel.numberOfLines = 0;
-    self.debugLabel.text = @"DEBUG STATS:\nRetrieving binary info...\nWaiting for application launch hooks...";
+    self.debugLabel.text = @"Initializing...";
     [debugRow addSubview:self.debugLabel];
     [self.menuPanel addSubview:debugRow];
-
-    // DUMP MEMORY BUTONU
-    UIButton *dumpBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    dumpBtn.frame = CGRectMake(15, 235, 290, 35);
-    dumpBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.94 blue:0.12 alpha:0.3];
-    dumpBtn.layer.cornerRadius = 6;
-    [dumpBtn setTitle:@"1) DUMP MEMORY" forState:UIControlStateNormal];
-    [dumpBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    dumpBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
-    [dumpBtn addTarget:self action:@selector(dumpMemory:) forControlEvents:UIControlEventTouchUpInside];
-    [self.menuPanel addSubview:dumpBtn];
     
-    // KOPYALAMA BUTONU
-    UIButton *copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    copyBtn.frame = CGRectMake(15, 280, 290, 35);
-    copyBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.94 alpha:0.5];
-    copyBtn.layer.cornerRadius = 6;
-    [copyBtn setTitle:@"2) COPY TO CLIPBOARD" forState:UIControlStateNormal];
-    [copyBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    copyBtn.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
-    [copyBtn addTarget:self action:@selector(copyLogToClipboard:) forControlEvents:UIControlEventTouchUpInside];
-    [self.menuPanel addSubview:copyBtn];
-
-    // CLOSE MENU BUTONU
     UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(15, 335, 290, 35);
+    closeBtn.frame = CGRectMake(15, 220, 290, 35);
     closeBtn.backgroundColor = [UIColor colorWithRed:0.94 green:0.45 blue:0.12 alpha:0.3];
     closeBtn.layer.cornerRadius = 6;
     [closeBtn setTitle:@"CLOSE MENU" forState:UIControlStateNormal];
@@ -161,13 +137,13 @@ static ClickGUIWindow *gGuiWindow = nil;
 }
 
 - (void)createSettingsPanel {
-    // Ayni kaldi
     CGSize screenSize = [UIScreen mainScreen].bounds.size;
+    
     self.settingsPanel = [[UIView alloc] initWithFrame:CGRectMake((screenSize.width - 320) / 2 + 330, (screenSize.height - 360) / 2, 280, 360)];
     self.settingsPanel.backgroundColor = [UIColor colorWithRed:0.06 green:0.06 blue:0.08 alpha:0.98];
     self.settingsPanel.layer.cornerRadius = 10;
     self.settingsPanel.layer.borderWidth = 1.5;
-    self.settingsPanel.layer.borderColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0].CGColor; 
+    self.settingsPanel.layer.borderColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0].CGColor;
     self.settingsPanel.hidden = YES;
     
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(15, 12, 200, 20)];
@@ -219,7 +195,7 @@ static ClickGUIWindow *gGuiWindow = nil;
     
     UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(180, 3, 51, 31)];
     sw.on = val;
-    sw.transform = CGAffineTransformMakeScale(0.75, 0.75); 
+    sw.transform = CGAffineTransformMakeScale(0.75, 0.75);
     sw.onTintColor = [UIColor colorWithRed:0.62 green:0.12 blue:0.94 alpha:1.0];
     [sw addTarget:self action:act forControlEvents:UIControlEventValueChanged];
     [row addSubview:sw];
@@ -228,75 +204,31 @@ static ClickGUIWindow *gGuiWindow = nil;
     *y += 42;
 }
 
-- (void)dumpMemory:(UIButton *)sender {
-    Hooks::triggerMemoryDump = true;
-    [sender setTitle:@"DUMPING... WAIT!" forState:UIControlStateNormal];
-    [sender setBackgroundColor:[UIColor orangeColor]];
-}
-
-- (void)copyLogToClipboard:(UIButton *)sender {
-    const char* home = std::getenv("HOME");
-    NSString *filePath = [NSString stringWithFormat:@"%s/tmp/minecraft_memory_dump.txt", home ? home : "."];
-    
-    NSError *error = nil;
-    NSString *content = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:&error];
-    
-    if (content && content.length > 0) {
-        [UIPasteboard generalPasteboard].string = content;
-        [sender setTitle:@"COPIED! PASTE NOW" forState:UIControlStateNormal];
-        [sender setBackgroundColor:[UIColor colorWithRed:0.0 green:0.8 blue:0.0 alpha:1.0]];
-        self.debugLabel.text = @"LOGS COPIED SUCCESSFULLY! You can paste them here.";
-    } else {
-        [sender setTitle:@"FAILED! (CHECK DEBUG)" forState:UIControlStateNormal];
-        [sender setBackgroundColor:[UIColor redColor]];
-        self.debugLabel.text = [NSString stringWithFormat:@"COPY ERROR:\n%@", error ? error.localizedDescription : @"File is empty or not found"];
-    }
-}
-
 - (void)updateDebugStats {
     uintptr_t baseAddr = (uintptr_t)_dyld_get_image_header(0);
-    // Hata mesaji yaziyorsa uzerine yazmasin diye kontrol
-    if (![self.debugLabel.text containsString:@"COPY ERROR"] && ![self.debugLabel.text containsString:@"COPIED SUCCESSFULLY"]) {
-        self.debugLabel.text = [NSString stringWithFormat:@"DEBUG STATS:\nBase: 0x%lx\nTick Addr: 0x%lx\nBS: 0x%lx\nTick Status: %s\nScanned Entities: %d",
-                                baseAddr,
-                                Hooks::gTickAddressResolved,
-                                Hooks::gDebugBlockSource,
-                                (Hooks::gTickAddressResolved != 0 ? "HOOKED" : "FAILED"),
-                                Hooks::gScannedEntitiesCount];
-    }
+    
+    NSString *status;
+    if (Hooks::gTickAddressResolved == 0x1337) status = @"HOOKED ✓";
+    else if (Hooks::gTickAddressResolved == 0xDEAD) status = @"Searching...";
+    else if (Hooks::gTickAddressResolved == 0xBEEF) status = @"No Region";
+    else status = @"Waiting...";
+    
+    self.debugLabel.text = [NSString stringWithFormat:@"Base: 0x%lx\nPlayer: 0x%lx\nBlockSource: 0x%lx\nStatus: %@\nEntities: %d",
+                            baseAddr,
+                            (uintptr_t)Hooks::gLocalPlayer,
+                            Hooks::gDebugBlockSource,
+                            status,
+                            Hooks::gScannedEntitiesCount];
 }
 
-- (void)espToggled:(UISwitch *)sender {
-    Hooks::storageEspEnabled = sender.on;
-}
-
-- (void)tracerToggled:(UISwitch *)sender {
-    Hooks::drawTracers = sender.on;
-}
-
-- (void)chestFilterToggled:(UISwitch *)sender {
-    Hooks::filterChest = sender.on;
-}
-
-- (void)enderFilterToggled:(UISwitch *)sender {
-    Hooks::filterEnderChest = sender.on;
-}
-
-- (void)shulkerFilterToggled:(UISwitch *)sender {
-    Hooks::filterShulker = sender.on;
-}
-
-- (void)hopperFilterToggled:(UISwitch *)sender {
-    Hooks::filterHopper = sender.on;
-}
-
-- (void)spawnerFilterToggled:(UISwitch *)sender {
-    Hooks::filterSpawner = sender.on;
-}
-
-- (void)barrelFilterToggled:(UISwitch *)sender {
-    Hooks::filterBarrel = sender.on;
-}
+- (void)espToggled:(UISwitch *)sender { Hooks::storageEspEnabled = sender.on; }
+- (void)tracerToggled:(UISwitch *)sender { Hooks::drawTracers = sender.on; }
+- (void)chestFilterToggled:(UISwitch *)sender { Hooks::filterChest = sender.on; }
+- (void)enderFilterToggled:(UISwitch *)sender { Hooks::filterEnderChest = sender.on; }
+- (void)shulkerFilterToggled:(UISwitch *)sender { Hooks::filterShulker = sender.on; }
+- (void)hopperFilterToggled:(UISwitch *)sender { Hooks::filterHopper = sender.on; }
+- (void)spawnerFilterToggled:(UISwitch *)sender { Hooks::filterSpawner = sender.on; }
+- (void)barrelFilterToggled:(UISwitch *)sender { Hooks::filterBarrel = sender.on; }
 
 - (void)toggleMenu {
     self.menuPanel.hidden = !self.menuPanel.hidden;
@@ -311,9 +243,7 @@ static ClickGUIWindow *gGuiWindow = nil;
 
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     UIView *hitView = [super hitTest:point withEvent:event];
-    if (hitView == self) {
-        return nil; 
-    }
+    if (hitView == self) return nil;
     return hitView;
 }
 @end
